@@ -106,13 +106,22 @@
 
   /* Default categories offered on first setup. */
   const STARTER_CATEGORIES = [
-    { emoji: "🏠", name: "Rent / Housing", budgeted: "" },
+    { emoji: "🐕", name: "Toro Insurance", budgeted: "" },
+    { emoji: "🐕", name: "Haku Insurance", budgeted: "" },
+    { emoji: "💍", name: "Kelly · Oura Ring", budgeted: "" },
+    { emoji: "📺", name: "Kelly · Netflix", budgeted: "" },
+    { emoji: "📱", name: "Kelly · Phone", budgeted: "" },
+    { emoji: "☁️", name: "Kelly · Apple Storage", budgeted: "" },
     { emoji: "🛒", name: "Groceries", budgeted: "" },
-    { emoji: "🚗", name: "Transport", budgeted: "" },
-    { emoji: "🍽️", name: "Eating out", budgeted: "" },
-    { emoji: "💡", name: "Bills & utilities", budgeted: "" },
-    { emoji: "🎉", name: "Fun", budgeted: "" },
-    { emoji: "💰", name: "Savings", budgeted: "" },
+    { emoji: "🍽️", name: "Restaurants", budgeted: "" },
+    { emoji: "🥡", name: "Take-Out", budgeted: "" },
+    { emoji: "🚗", name: "Ride-Share", budgeted: "" },
+    { emoji: "🚇", name: "TTC", budgeted: "" },
+    { emoji: "🦴", name: "Dog Essentials", budgeted: "" },
+    { emoji: "🛍️", name: "Shopping", budgeted: "" },
+    { emoji: "📦", name: "Miscellaneous", budgeted: "" },
+    { emoji: "💆", name: "Facial", budgeted: "" },
+    { emoji: "🧑‍⚕️", name: "Chiro", budgeted: "" },
   ];
 
   /* ------------------------------------------------------------------ *
