@@ -7,7 +7,7 @@
   const STORAGE_KEY = "payday-budget-v1";
 
   /* Default recipient for the "Email report" button. Change anytime. */
-  const REPORT_EMAIL = "derek.chu@cmic.ca";
+  const REPORT_EMAIL = "derekchu12@gmail.com";
 
   /* ------------------------------------------------------------------ *
    * State
