@@ -6,6 +6,9 @@
 
   const STORAGE_KEY = "payday-budget-v1";
 
+  /* Default recipient for the "Email report" button. Change anytime. */
+  const REPORT_EMAIL = "derek.chu@cmic.ca";
+
   /* ------------------------------------------------------------------ *
    * State
    * ------------------------------------------------------------------ */
@@ -43,12 +46,16 @@
   const uid = () =>
     Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
-  const fmt = (n) =>
-    "$" +
-    Number(n || 0).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+  const fmt = (n) => {
+    const v = Number(n || 0);
+    const body =
+      "$" +
+      Math.abs(v).toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    return v < 0 ? "-" + body : body;
+  };
 
   const fmtShort = (n) => {
     const v = Number(n || 0);
@@ -138,15 +145,18 @@
 
     const period = activePeriod();
 
+    // History and Report stay reachable even between paychecks (no active period).
+    if (state.view === "history") return renderHistory();
+    if (state.view === "report") return renderReport();
+
     if (!period) {
-      // No active budget — force setup regardless of tab.
+      // No active budget — force setup for the budgeting tabs.
       renderSetup();
       return;
     }
 
     if (state.view === "dashboard") renderDashboard(period);
     else if (state.view === "spend") renderSpend(period);
-    else if (state.view === "history") renderHistory();
   }
 
   /* ---------- Setup / new payday flow ---------- */
@@ -621,6 +631,145 @@
         close();
         render();
       }
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Report — auto-generate a summary and send it via share/email/copy
+   * ------------------------------------------------------------------ */
+  function buildReport(p) {
+    const budgeted = totalBudgeted(p);
+    const spent = totalSpent(p);
+    const remaining = budgeted - spent;
+    const saved = p.paycheckAmount - spent;
+    const unbudgeted = p.paycheckAmount - budgeted;
+    const active = !p.closed;
+    const dl = daysLeft(p);
+
+    const pad = (label, value) => label.padEnd(13) + value;
+
+    const catLines = p.categories
+      .slice()
+      .sort((a, b) => catSpent(p, b.id) - catSpent(p, a.id))
+      .map((c) => {
+        const cs = catSpent(p, c.id);
+        const diff = c.budgeted - cs;
+        const flag = cs > c.budgeted + 0.005 ? "🔴" : cs > c.budgeted * 0.85 ? "⚠️" : "✅";
+        const tail =
+          diff < -0.005 ? `${fmt(-diff)} over` : `${fmt(diff)} left`;
+        return `${flag} ${c.emoji} ${c.name}\n     ${fmt(cs)} of ${fmt(c.budgeted)}  ·  ${tail}`;
+      })
+      .join("\n");
+
+    const status = remaining < -0.005 ? "🔴 over budget" : "✅ within budget";
+
+    const lines = [
+      "💸 Payday Budget — Summary",
+      `Pay period starting ${fmtDateLong(p.startDate)}`,
+      `${freqLabel(p.frequency)}${active ? ` · ${dl} ${dl === 1 ? "day" : "days"} left` : " · closed"}`,
+      "",
+      pad("Paycheck", fmt(p.paycheckAmount)),
+      pad("Budgeted", fmt(budgeted)),
+      pad("Spent", fmt(spent)),
+      pad(active ? "Remaining" : "Left over", `${fmt(active ? remaining : saved)}  ${status}`),
+      pad(unbudgeted >= 0 ? "Unbudgeted" : "Over-alloc", fmt(Math.abs(unbudgeted))),
+      "",
+      "By category (most spent first):",
+      catLines || "  (no spending yet)",
+      "",
+      `Generated ${new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}`,
+    ];
+
+    const subject = `Budget summary — ${fmtDateLong(p.startDate)} (${fmt(spent)} spent)`;
+    return { subject, text: lines.join("\n") };
+  }
+
+  function renderReport() {
+    // Newest first: active period, then closed periods.
+    const periods = state.periods.slice().reverse();
+    if (periods.length === 0) {
+      main.innerHTML = `<div class="empty"><div class="big">📊</div><h2>No report yet</h2><p>Set up a pay period first, then come back to generate a summary you can email or message.</p></div>`;
+      return;
+    }
+
+    // Which period to report on — default to the newest.
+    if (!state._reportId || !periods.some((p) => p.id === state._reportId)) {
+      state._reportId = periods[0].id;
+    }
+    const selected = periods.find((p) => p.id === state._reportId);
+    const { subject, text } = buildReport(selected);
+    const canShare = typeof navigator !== "undefined" && !!navigator.share;
+
+    main.innerHTML = `
+      <div class="card">
+        <h2>Summary report</h2>
+        <p class="sub">Auto-generated from your budget. Send it however you like.</p>
+        <div class="field">
+          <label>Which pay period?</label>
+          <select id="rp-period">
+            ${periods
+              .map(
+                (p) =>
+                  `<option value="${p.id}" ${p.id === selected.id ? "selected" : ""}>${esc(fmtDateLong(p.startDate))}${p.closed ? "" : " (current)"}</option>`
+              )
+              .join("")}
+          </select>
+        </div>
+
+        <div class="report-preview">${esc(text)}</div>
+
+        ${canShare ? `<button class="btn btn-primary btn-block" id="rp-share">📤 Share…</button>` : ""}
+        <div class="field-row" style="margin-top:${canShare ? "10px" : "0"};">
+          <button class="btn btn-ghost" id="rp-email" style="flex:1;">✉️ Email to me</button>
+          <button class="btn btn-ghost" id="rp-copy" style="flex:1;">📋 Copy</button>
+        </div>
+        <p class="footer-note">"Email to me" opens a draft to ${esc(REPORT_EMAIL)}.</p>
+      </div>
+    `;
+
+    document.getElementById("rp-period").addEventListener("change", (e) => {
+      state._reportId = e.target.value;
+      render();
+    });
+
+    const shareBtn = document.getElementById("rp-share");
+    if (shareBtn) {
+      shareBtn.addEventListener("click", async () => {
+        try {
+          await navigator.share({ title: subject, text });
+        } catch (e) {
+          /* user cancelled — ignore */
+        }
+      });
+    }
+
+    document.getElementById("rp-email").addEventListener("click", () => {
+      const href =
+        "mailto:" +
+        encodeURIComponent(REPORT_EMAIL) +
+        "?subject=" +
+        encodeURIComponent(subject) +
+        "&body=" +
+        encodeURIComponent(text);
+      window.location.href = href;
+    });
+
+    document.getElementById("rp-copy").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Fallback for insecure contexts / older browsers.
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); } catch {}
+        document.body.removeChild(ta);
+      }
+      const orig = btn.textContent;
+      btn.textContent = "✓ Copied";
+      setTimeout(() => (btn.textContent = orig), 1500);
     });
   }
 

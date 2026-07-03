@@ -271,5 +271,19 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 
 .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin: 6px 0 10px; }
 
+.report-preview {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 14px;
+  margin: 8px 0 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
 .footer-note { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 20px; }
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
