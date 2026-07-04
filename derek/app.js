@@ -15,6 +15,7 @@
   const defaultState = () => ({
     periods: [],          // list of pay periods, newest last
     template: null,       // remembered category layout for the next payday
+    goal: null,           // optional savings goal { name, target }
     view: "dashboard",
   });
 
@@ -102,6 +103,14 @@
 
   const totalBudgeted = (p) => p.categories.reduce((s, c) => s + Number(c.budgeted), 0);
   const totalSpent = (p) => p.transactions.reduce((s, t) => s + Number(t.amount), 0);
+  // Total income for a period: the paycheck plus any extra income logged.
+  const periodIncome = (p) =>
+    Number(p.paycheckAmount || 0) + (p.extraIncome || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+  // Actual money saved in a period = income minus everything spent.
+  const periodSaved = (p) => periodIncome(p) - totalSpent(p);
+  // Cumulative savings across all closed (finished) periods.
+  const totalSavedToDate = () =>
+    state.periods.filter((p) => p.closed).reduce((s, p) => s + periodSaved(p), 0);
 
   // Set of category ids currently spent over their (non-zero) budget.
   function overBudgetIds(p) {
@@ -476,7 +485,7 @@
     const budgeted = totalBudgeted(p);
     const spent = totalSpent(p);
     const remaining = budgeted - spent;
-    const saved = p.paycheckAmount - budgeted;
+    const saved = periodIncome(p) - budgeted;
     const dl = daysLeft(p);
 
     const renderCat = (c) => {
@@ -495,11 +504,11 @@
           <span class="cat-body">
             <span class="cat-line">
               <span class="cat-name">${esc(c.name)}${fixedTag}</span>
-              <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
+              <span class="cat-pct">${pctLabel}</span>
             </span>
             <span class="cat-line cat-sub">
               <span class="cat-spent"><b>${fmt(cs)}</b> of ${fmt(c.budgeted)}</span>
-              <span class="cat-pct">${pctLabel}</span>
+              <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
             </span>
             <span class="bar"><span class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span>
           </span>
@@ -518,6 +527,7 @@
         : p.categories.map(renderCat).join("");
 
     main.innerHTML = `
+      ${dl === 0 ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>` : ""}
       <div class="card hero">
         <div class="label">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
@@ -540,16 +550,65 @@
         ${cats}
       </div>
 
-      <button class="btn btn-ghost btn-block" id="new-payday">💵 Got paid? Start a new pay period</button>
-      <p class="footer-note">Starting a new period saves this one to your history.</p>
+      <button class="btn btn-ghost btn-block" id="add-income">➕ Add extra income</button>
+      <button class="btn btn-ghost btn-block" id="new-payday" style="margin-top:10px;">💵 Got paid? Start a new pay period</button>
+      <p class="footer-note">Extra income (a bonus or second paycheck) adds to what you save this period.</p>
     `;
 
     document.getElementById("quick-add").addEventListener("click", () => openSpendModal(p));
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
+    document.getElementById("add-income").addEventListener("click", () => openIncomeModal(p));
     document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
+    const pe = document.getElementById("period-ended");
+    if (pe) pe.addEventListener("click", () => confirmNewPayday(p));
     main.querySelectorAll(".cat-row-tap").forEach((el) =>
       el.addEventListener("click", () => openSpendModal(p, el.dataset.cat))
     );
+  }
+
+  /* ---------- Add extra income to the current period ---------- */
+  function openIncomeModal(p) {
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Add income">
+          <h2>Add extra income</h2>
+          <p class="sub">A bonus, refund, or second paycheck this period — it increases what you can save.</p>
+          <div class="field money-input">
+            <label for="inc-amount">Amount</label>
+            <input id="inc-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01" />
+          </div>
+          <div class="field">
+            <label for="inc-note">Note (optional)</label>
+            <input id="inc-note" placeholder="e.g. Work bonus" />
+          </div>
+          <div class="field-row">
+            <button class="btn btn-ghost" id="inc-cancel" style="flex:1;">Cancel</button>
+            <button class="btn btn-primary" id="inc-save" style="flex:2;">Add income</button>
+          </div>
+        </div>
+      </div>
+    `);
+    const amountEl = document.getElementById("inc-amount");
+    amountEl.addEventListener("input", () => clearFieldError(amountEl));
+    document.getElementById("inc-cancel").addEventListener("click", close);
+    document.getElementById("inc-save").addEventListener("click", () => {
+      const amount = Number(amountEl.value);
+      if (!amount || amount <= 0) {
+        showFieldError(amountEl, "Enter an amount greater than zero.");
+        return;
+      }
+      if (!p.extraIncome) p.extraIncome = [];
+      p.extraIncome.push({
+        id: uid(),
+        amount,
+        note: document.getElementById("inc-note").value.trim(),
+        date: todayISO(),
+      });
+      save();
+      close();
+      render();
+      showToast("Income added");
+    });
   }
 
   /* ---------- Manage categories (add / remove / edit on an active period) ---------- */
@@ -907,33 +966,99 @@
 
   /* ---------- History ---------- */
   function renderHistory() {
-    const closed = state.periods.filter((p) => p.closed).slice().reverse();
+    const closed = state.periods.filter((p) => p.closed).slice().reverse(); // newest first
 
     if (closed.length === 0) {
-      main.innerHTML = `<div class="empty"><div class="big">📚</div><h2>No history yet</h2><p>Finished pay periods will show up here so you can see how you did over time.</p></div>`;
+      main.innerHTML = `<div class="empty"><div class="big">📊</div><h2>No history yet</h2><p>Finish a pay period and it lands here — with your total saved, trends, and spending patterns over time.</p></div>`;
       return;
     }
 
+    const n = closed.length;
+    const totalSaved = totalSavedToDate();
+    const avgSaved = closed.reduce((s, p) => s + periodSaved(p), 0) / n;
+    const avgSpent = closed.reduce((s, p) => s + totalSpent(p), 0) / n;
+
+    // Savings per period — oldest→newest, most recent 8.
+    const chrono = closed.slice().reverse().slice(-8);
+    const svals = chrono.map((p) => periodSaved(p));
+    const smax = Math.max(1, ...svals.map((v) => Math.abs(v)));
+    const chart = `<div class="savings-chart">${chrono
+      .map((p, i) => {
+        const v = svals[i];
+        const h = Math.max(4, Math.round((Math.abs(v) / smax) * 100));
+        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${v < 0 ? "neg" : ""}" style="height:${h}%" title="${fmt(v)}"></div></div><div class="sc-x">${esc(fmtDateShort(p.startDate))}</div></div>`;
+      })
+      .join("")}</div>`;
+
+    // Overspend patterns across all closed periods.
+    const overCount = {};
+    closed.forEach((p) =>
+      p.categories.forEach((c) => {
+        if (c.budgeted > 0 && catSpent(p, c.id) > c.budgeted + 0.005) {
+          const key = `${c.emoji}||${c.name}`;
+          overCount[key] = (overCount[key] || 0) + 1;
+        }
+      })
+    );
+    const topOver = Object.entries(overCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+    const goal = state.goal;
+    const goalPct = goal && goal.target > 0 ? Math.min(100, (Math.max(0, totalSaved) / goal.target) * 100) : 0;
+    const goalHtml = goal
+      ? `<button type="button" class="goal" id="goal-edit">
+           <div class="goal-top"><span class="goal-name">🎯 ${esc(goal.name)}</span><span class="goal-nums">${fmt(Math.max(0, totalSaved))} / ${fmt(goal.target)}</span></div>
+           <div class="bar"><div class="bar-fill ok" style="width:${goalPct}%"></div></div>
+           <div class="goal-sub">${totalSaved >= goal.target ? "Goal reached! 🎉" : fmt(goal.target - Math.max(0, totalSaved)) + " to go"}</div>
+         </button>`
+      : `<button class="btn btn-ghost btn-sm" id="set-goal-btn" style="margin-top:12px;">🎯 Set a savings goal</button>`;
+
     const items = closed
       .map((p) => {
-        const budgeted = totalBudgeted(p);
         const spent = totalSpent(p);
-        const saved = p.paycheckAmount - spent;
+        const saved = periodSaved(p);
         return `
         <div class="hist-item" data-id="${p.id}">
           <div>
             <div class="hist-date">${esc(fmtDateLong(p.startDate))}</div>
-            <div class="hist-sub">Paid ${fmt(p.paycheckAmount)} · spent ${fmt(spent)}</div>
+            <div class="hist-sub">Income ${fmt(periodIncome(p))} · spent ${fmt(spent)}</div>
           </div>
           <div class="hist-right">
             <div class="hist-saved ${saved >= 0 ? "pos" : "neg"}">${saved >= 0 ? "+" : ""}${fmt(saved)}</div>
-            <div class="hist-sub">${saved >= 0 ? "left over" : "overspent"}</div>
+            <div class="hist-sub">${saved >= 0 ? "saved" : "overspent"}</div>
           </div>
         </div>`;
       })
       .join("");
 
     main.innerHTML = `
+      <div class="card">
+        <div class="ins-label">Total saved to date</div>
+        <div class="ins-amount ${totalSaved < 0 ? "neg" : ""}">${fmt(totalSaved)}</div>
+        <div class="ins-sub">across ${n} pay period${n === 1 ? "" : "s"} · avg ${fmt(avgSaved)} saved · ${fmt(avgSpent)} spent</div>
+        ${goalHtml}
+      </div>
+
+      <div class="card">
+        <h2>Saved per period</h2>
+        <p class="sub">Most recent ${chrono.length} period${chrono.length === 1 ? "" : "s"}.</p>
+        ${chart}
+      </div>
+
+      ${
+        topOver.length
+          ? `<div class="card">
+        <h2>Watch these</h2>
+        <p class="sub">Categories you went over most often.</p>
+        ${topOver
+          .map(([k, c]) => {
+            const [emoji, name] = k.split("||");
+            return `<div class="ov-item"><span class="ov-name">${esc(emoji)} ${esc(name)}</span><span class="ov-count">${c}× over</span></div>`;
+          })
+          .join("")}
+      </div>`
+          : ""
+      }
+
       <div class="card">
         <h2>Past pay periods</h2>
         <p class="sub">Tap one to see the details.</p>
@@ -944,6 +1069,68 @@
     main.querySelectorAll(".hist-item").forEach((el) =>
       el.addEventListener("click", () => openHistoryDetail(el.dataset.id))
     );
+    const sg = document.getElementById("set-goal-btn");
+    if (sg) sg.addEventListener("click", openGoalModal);
+    const ge = document.getElementById("goal-edit");
+    if (ge) ge.addEventListener("click", openGoalModal);
+  }
+
+  function fmtDateShort(iso) {
+    try {
+      return parseDate(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    } catch {
+      return iso;
+    }
+  }
+
+  /* ---------- Savings goal ---------- */
+  function openGoalModal() {
+    const g = state.goal || { name: "", target: "" };
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Savings goal">
+          <h2>Savings goal</h2>
+          <p class="sub">Set a target — your progress is your total saved across all finished pay periods.</p>
+          <div class="field">
+            <label for="goal-name">What's it for?</label>
+            <input id="goal-name" placeholder="e.g. Trip to Japan" value="${esc(g.name || "")}" />
+          </div>
+          <div class="field money-input">
+            <label for="goal-target">Target amount</label>
+            <input id="goal-target" type="number" inputmode="decimal" placeholder="0.00" step="0.01" value="${g.target != null ? esc(g.target) : ""}" />
+          </div>
+          <div class="field-row">
+            ${state.goal
+              ? `<button class="btn btn-danger" id="goal-clear" style="flex:1;">Remove</button>`
+              : `<button class="btn btn-ghost" id="goal-cancel" style="flex:1;">Cancel</button>`}
+            <button class="btn btn-primary" id="goal-save" style="flex:2;">Save goal</button>
+          </div>
+        </div>
+      </div>
+    `);
+    const targetEl = document.getElementById("goal-target");
+    targetEl.addEventListener("input", () => clearFieldError(targetEl));
+    document.getElementById("goal-save").addEventListener("click", () => {
+      const target = Number(targetEl.value);
+      if (!target || target <= 0) {
+        showFieldError(targetEl, "Enter a target greater than zero.");
+        return;
+      }
+      state.goal = { name: document.getElementById("goal-name").value.trim() || "Savings goal", target };
+      save();
+      close();
+      render();
+    });
+    const cancel = document.getElementById("goal-cancel");
+    if (cancel) cancel.addEventListener("click", close);
+    const clear = document.getElementById("goal-clear");
+    if (clear)
+      clear.addEventListener("click", () => {
+        state.goal = null;
+        save();
+        close();
+        render();
+      });
   }
 
   function fmtDateLong(iso) {
@@ -1003,8 +1190,8 @@
     const budgeted = totalBudgeted(p);
     const spent = totalSpent(p);
     const remaining = budgeted - spent;
-    const saved = p.paycheckAmount - spent;
-    const unbudgeted = p.paycheckAmount - budgeted;
+    const saved = periodIncome(p) - spent;
+    const unbudgeted = periodIncome(p) - budgeted;
     const active = !p.closed;
     const dl = daysLeft(p);
 
@@ -1030,7 +1217,7 @@
       `Pay period starting ${fmtDateLong(p.startDate)}`,
       `${freqLabel(p.frequency)}${active ? ` · ${dl} ${dl === 1 ? "day" : "days"} left` : " · closed"}`,
       "",
-      pad("Paycheck", fmt(p.paycheckAmount)),
+      pad("Income", fmt(periodIncome(p))),
       pad("Budgeted", fmt(budgeted)),
       pad("Spent", fmt(spent)),
       pad(active ? "Remaining" : "Left over", `${fmt(active ? remaining : saved)}  ${status}`),

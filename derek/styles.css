@@ -277,6 +277,37 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .hist-saved.pos { color: var(--good); }
 .hist-saved.neg { color: var(--danger); }
 
+/* Period-ended banner */
+.period-ended { margin-bottom: 14px; }
+
+/* Insights (History tab) */
+.ins-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.ins-amount { font-size: 34px; font-weight: 800; letter-spacing: -0.02em; margin: 4px 0 2px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.ins-amount.neg { color: var(--danger); }
+.ins-sub { font-size: 13px; color: var(--text-dim); }
+
+/* Savings goal */
+.goal { display: block; width: 100%; text-align: left; background: var(--surface-2); border: none; border-radius: 12px; padding: 12px 14px; margin-top: 14px; cursor: pointer; font: inherit; color: inherit; }
+.goal-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: 14px; }
+.goal-name { font-weight: 600; }
+.goal-nums { color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.goal-sub { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+.goal .bar { height: 10px; }
+
+/* Savings-per-period chart */
+.savings-chart { display: flex; align-items: stretch; gap: 8px; height: 140px; }
+.sc-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.sc-track { flex: 1; display: flex; align-items: flex-end; }
+.sc-bar { width: 68%; max-width: 40px; margin: 0 auto; background: var(--good); border-radius: 6px 6px 0 0; transition: height 0.5s ease; }
+.sc-bar.neg { background: var(--danger); }
+.sc-x { text-align: center; font-size: 10px; color: var(--text-dim); margin-top: 6px; white-space: nowrap; }
+
+/* Overspend patterns */
+.ov-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.ov-item:last-child { border-bottom: none; }
+.ov-name { font-weight: 600; }
+.ov-count { font-size: 12.5px; color: var(--warn); font-weight: 600; white-space: nowrap; }
+
 .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin: 6px 0 10px; }
 
 .report-preview {
