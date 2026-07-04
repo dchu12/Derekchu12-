@@ -16,6 +16,7 @@
     periods: [],          // list of pay periods, newest last
     template: null,       // remembered category layout for the next payday
     goal: null,           // optional savings goal { name, target }
+    fixedCollapsed: false, // whether the Fixed bills section is collapsed
     view: "dashboard",
   });
 
@@ -518,10 +519,16 @@
 
     const fixedCats = p.categories.filter((c) => c.fixed);
     const spendCats = p.categories.filter((c) => !c.fixed);
+    const fixedCollapsed = !!state.fixedCollapsed;
+    const fixedBudgeted = fixedCats.reduce((s, c) => s + Number(c.budgeted), 0);
     const cats =
       fixedCats.length && spendCats.length
-        ? `<div class="section-label">Fixed bills</div>` +
-          fixedCats.map(renderCat).join("") +
+        ? `<button type="button" class="section-toggle" id="fixed-toggle" aria-expanded="${!fixedCollapsed}">
+             <span class="section-label" style="margin:0;">Fixed bills</span>
+             <span class="section-meta">${fixedCats.length} · ${fmt(fixedBudgeted)}</span>
+             <span class="section-caret ${fixedCollapsed ? "collapsed" : ""}" aria-hidden="true">▾</span>
+           </button>` +
+          (fixedCollapsed ? "" : fixedCats.map(renderCat).join("")) +
           `<div class="section-label cat-section-gap">Spending</div>` +
           spendCats.map(renderCat).join("")
         : p.categories.map(renderCat).join("");
@@ -561,6 +568,13 @@
     document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
     const pe = document.getElementById("period-ended");
     if (pe) pe.addEventListener("click", () => confirmNewPayday(p));
+    const ft = document.getElementById("fixed-toggle");
+    if (ft)
+      ft.addEventListener("click", () => {
+        state.fixedCollapsed = !state.fixedCollapsed;
+        save();
+        render();
+      });
     main.querySelectorAll(".cat-row-tap").forEach((el) =>
       el.addEventListener("click", () => openSpendModal(p, el.dataset.cat))
     );
