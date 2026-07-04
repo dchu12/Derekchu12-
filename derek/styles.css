@@ -107,8 +107,9 @@ body {
 .cat-emoji { font-size: 18px; }
 .cat-name-block { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .cat-spent { font-size: 13px; color: var(--text-dim); }
-.cat-left { font-size: 12px; color: var(--text-dim); text-align: right; white-space: nowrap; line-height: 1.25; }
-.cat-left b { display: block; color: var(--text); font-size: 15px; font-weight: 700; }
+.cat-left { font-size: 13px; color: var(--text-dim); text-align: right; white-space: nowrap; }
+.cat-left b { color: var(--text); font-size: 15px; font-weight: 700; }
+.cat-left .cat-left-label { color: var(--text-dim); font-size: 12px; margin-left: 3px; }
 .cat-left.over b { color: var(--danger); }
 /* Used in the History detail modal */
 .cat-amounts { font-size: 13px; color: var(--text-dim); text-align: right; }

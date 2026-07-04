@@ -498,7 +498,7 @@
               <span class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}${fixedTag}</span>
               <span class="cat-spent">${fmt(cs)} of ${fmt(c.budgeted)}</span>
             </span>
-            <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b>${remainLabel}</span>
+            <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
           </div>
           <div class="bar"><div class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></div></div>
         </button>`;
