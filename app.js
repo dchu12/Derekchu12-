@@ -6,8 +6,8 @@
 
   const STORAGE_KEY = "payday-budget-v1";
 
-  /* Default recipient for the "Email report" button. Change anytime. */
-  const REPORT_EMAIL = "derekchu12@gmail.com";
+  /* Default recipients for the "Email report" button. Change anytime. */
+  const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* ------------------------------------------------------------------ *
    * State
@@ -1007,10 +1007,10 @@
 
         ${canShare ? `<button class="btn btn-primary btn-block" id="rp-share">📤 Share…</button>` : ""}
         <div class="field-row" style="margin-top:${canShare ? "10px" : "0"};">
-          <button class="btn btn-ghost" id="rp-email" style="flex:1;">✉️ Email to me</button>
+          <button class="btn btn-ghost" id="rp-email" style="flex:1;">✉️ Email report</button>
           <button class="btn btn-ghost" id="rp-copy" style="flex:1;">📋 Copy</button>
         </div>
-        <p class="footer-note">"Email to me" opens a draft to ${esc(REPORT_EMAIL)}.</p>
+        <p class="footer-note">"Email report" opens a draft to ${esc(REPORT_EMAILS.join(" and "))}.</p>
       </div>
     `;
 
@@ -1031,9 +1031,10 @@
     }
 
     document.getElementById("rp-email").addEventListener("click", () => {
+      // Comma-separated recipients go in the mailto path (not percent-encoded).
       const href =
         "mailto:" +
-        encodeURIComponent(REPORT_EMAIL) +
+        REPORT_EMAILS.join(",") +
         "?subject=" +
         encodeURIComponent(subject) +
         "&body=" +
