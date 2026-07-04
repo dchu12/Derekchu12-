@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "18";
+  const APP_VERSION = "19";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -1240,7 +1240,7 @@
     const status = remaining < -0.005 ? "🔴 over budget" : "✅ within budget";
 
     const lines = [
-      "🐷 Kelly's Payday Budget — Summary",
+      "🐶 Kelly's Payday Budget — Summary",
       `Pay period starting ${fmtDateLong(p.startDate)}`,
       `${freqLabel(p.frequency)}${active ? ` · ${dl} ${dl === 1 ? "day" : "days"} left` : " · closed"}`,
       "",
