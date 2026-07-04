@@ -103,6 +103,15 @@
   const totalBudgeted = (p) => p.categories.reduce((s, c) => s + Number(c.budgeted), 0);
   const totalSpent = (p) => p.transactions.reduce((s, t) => s + Number(t.amount), 0);
 
+  // Set of category ids currently spent over their (non-zero) budget.
+  function overBudgetIds(p) {
+    return new Set(
+      p.categories
+        .filter((c) => c.budgeted > 0 && catSpent(p, c.id) > c.budgeted + 0.005)
+        .map((c) => c.id)
+    );
+  }
+
   const freqLabel = (f) =>
     ({ weekly: "Weekly", biweekly: "Every 2 weeks", semimonthly: "Twice a month", monthly: "Monthly" }[f] || f);
 
@@ -793,15 +802,68 @@
         description: document.getElementById("sp-desc").value.trim(),
         date: document.getElementById("sp-date").value || todayISO(),
       };
+      const before = overBudgetIds(p);
       if (editing) {
         Object.assign(editTxn, fields);
       } else {
         p.transactions.push({ id: uid(), ...fields });
       }
       save();
+      const after = overBudgetIds(p);
+      const newlyOver = p.categories.filter((c) => after.has(c.id) && !before.has(c.id));
       close();
       render();
+      if (newlyOver.length) openOverBudgetAlert(p, newlyOver);
     });
+  }
+
+  /* Fires when logging spending pushes a category over its budget. */
+  function openOverBudgetAlert(p, cats) {
+    const detail = cats
+      .map((c) => {
+        const cs = catSpent(p, c.id);
+        return `<li><b>${esc(c.emoji)} ${esc(c.name)}</b> — over by <b class="ob-amt">${fmt(cs - c.budgeted)}</b><br /><span class="ob-sub">${fmt(cs)} spent of ${fmt(c.budgeted)}</span></li>`;
+      })
+      .join("");
+
+    const plural = cats.length > 1;
+    const subject = `⚠️ Over budget: ${cats.map((c) => c.name).join(", ")}`;
+    const body =
+      `Kelly has exceeded the budget in the following categor${plural ? "ies" : "y"}:\n\n` +
+      cats
+        .map((c) => {
+          const cs = catSpent(p, c.id);
+          return `• ${c.name}: spent ${fmt(cs)} of ${fmt(c.budgeted)} — over by ${fmt(cs - c.budgeted)}`;
+        })
+        .join("\n") +
+      `\n\nPay period starting ${fmtDateLong(p.startDate)}.` +
+      `\n\n— sent from Payday Budget`;
+
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="alertdialog" aria-modal="true" aria-label="Over budget alert">
+          <div class="ob-head">⚠️</div>
+          <h2 style="text-align:center;">Over budget</h2>
+          <p class="sub" style="text-align:center;">Heads up — this spending puts ${plural ? "these categories" : "this category"} over budget.</p>
+          <ul class="ob-list">${detail}</ul>
+          <button class="btn btn-primary btn-block" id="ob-email">✉️ Email alert to Kelly &amp; Derek</button>
+          <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled message to ${esc(REPORT_EMAILS.join(" and "))}.</p>
+          <button class="btn btn-ghost btn-block" id="ob-dismiss">Dismiss</button>
+        </div>
+      </div>
+    `);
+
+    document.getElementById("ob-email").addEventListener("click", () => {
+      const href =
+        "mailto:" +
+        REPORT_EMAILS.join(",") +
+        "?subject=" +
+        encodeURIComponent(subject) +
+        "&body=" +
+        encodeURIComponent(body);
+      window.location.href = href;
+    });
+    document.getElementById("ob-dismiss").addEventListener("click", close);
   }
 
   /* ---------- New payday confirmation ---------- */
