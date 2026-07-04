@@ -92,7 +92,7 @@ body {
 .hstat { text-align: center; padding: 0 6px; }
 .hstat + .hstat { border-left: 1px solid rgba(255,255,255,0.22); }
 .hk { font-size: 10.5px; opacity: 0.8; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
-.hv { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.hv { font-size: 15px; font-weight: 600; letter-spacing: -0.005em; font-variant-numeric: tabular-nums; }
 .hero-foot { text-align: center; font-size: 12px; opacity: 0.8; margin-top: 12px; }
 
 .days-pill {
