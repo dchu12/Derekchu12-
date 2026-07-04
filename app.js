@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "17";
+  const APP_VERSION = "18";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -549,11 +549,6 @@
         <div class="label">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
         <div class="days-pill">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`}</div>
-        <div class="hero-grid">
-          <div class="hstat"><div class="hk">Budgeted</div><div class="hv">${fmt(budgeted)}</div></div>
-          <div class="hstat"><div class="hk">Spent</div><div class="hv">${fmt(spent)}</div></div>
-          <div class="hstat"><div class="hk">${saved >= 0 ? "Saved" : "Over"}</div><div class="hv">${fmt(Math.abs(saved))}</div></div>
-        </div>
       </div>
 
       <div class="card">
@@ -565,6 +560,14 @@
           </div>
         </div>
         ${cats}
+      </div>
+
+      <div class="card stat-card">
+        <div class="stat-grid">
+          <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
+          <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
+          <div class="sstat"><div class="sk">${saved >= 0 ? "Saved" : "Over"}</div><div class="sv ${saved < 0 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
+        </div>
       </div>
 
       <button class="btn btn-ghost btn-block" id="add-income">➕ Add extra income</button>
