@@ -341,13 +341,13 @@
 
       <div class="card">
         <h2>Split it into a budget</h2>
-        <p class="sub">Decide now where every dollar goes until your next paycheck.</p>
+        <p class="sub">Budget what you plan to spend — whatever's left over is your savings.</p>
         <div id="alloc-list"></div>
         <button class="btn btn-ghost btn-sm" id="add-cat">+ Add category</button>
 
         <div class="alloc-summary">
           <span>Paycheck <b id="sum-paycheck">$0.00</b></span>
-          <span>Left to budget <b class="remaining" id="sum-remaining">$0.00</b></span>
+          <span>Savings <b class="remaining" id="sum-remaining">$0.00</b></span>
         </div>
 
         <button class="btn btn-primary btn-block" id="start-period">Start this pay period</button>
@@ -476,7 +476,7 @@
     const budgeted = totalBudgeted(p);
     const spent = totalSpent(p);
     const remaining = budgeted - spent;
-    const unbudgeted = p.paycheckAmount - budgeted;
+    const saved = p.paycheckAmount - budgeted;
     const dl = daysLeft(p);
     const perDay = dl > 0 ? remaining / dl : remaining;
 
@@ -509,8 +509,8 @@
         <span class="days-pill">${dl} ${dl === 1 ? "day" : "days"} left · ${fmt(Math.max(0, perDay))}/day</span>
         <div class="hero-grid">
           <div class="hstat"><div class="hk">Spent</div><div class="hv">${fmt(spent)}</div></div>
+          <div class="hstat"><div class="hk">${saved >= 0 ? "Saved" : "Over"}</div><div class="hv">${fmt(Math.abs(saved))}</div></div>
           <div class="hstat"><div class="hk">Budgeted</div><div class="hv">${fmt(budgeted)}</div></div>
-          <div class="hstat"><div class="hk">${unbudgeted >= 0 ? "Unbudgeted" : "Over"}</div><div class="hv">${fmt(Math.abs(unbudgeted))}</div></div>
         </div>
       </div>
 
@@ -1019,7 +1019,7 @@
       pad("Budgeted", fmt(budgeted)),
       pad("Spent", fmt(spent)),
       pad(active ? "Remaining" : "Left over", `${fmt(active ? remaining : saved)}  ${status}`),
-      pad(unbudgeted >= 0 ? "Unbudgeted" : "Over-alloc", fmt(Math.abs(unbudgeted))),
+      pad(unbudgeted >= 0 ? "Saved" : "Over-budget", fmt(Math.abs(unbudgeted))),
       "",
       "By category (most spent first):",
       catLines || "  (no spending yet)",
