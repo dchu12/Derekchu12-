@@ -1,22 +1,21 @@
 :root {
-  /* Pink blossom + a periwinkle blue that pairs with it.
-     Deliberately single-theme (always light) — cherry blossom is a pale,
-     airy aesthetic, so we ignore the device's dark-mode preference. */
+  /* Ocean blue + a cyan that pairs with it.
+     Deliberately single-theme (always light) — we ignore device dark mode. */
   color-scheme: light;
-  --bg: #fdf4f7;
+  --bg: #f2f6fd;
   --surface: #ffffff;
-  --surface-2: #fbeaf1;
-  --border: #f3d5e1;
-  --text: #3a2b33;
-  --text-dim: #927e88;
-  --accent: #d6448a;        /* blossom rose — primary */
-  --accent-2: #7f97e0;      /* periwinkle blue — pairs with blossom */
-  --accent-soft: #ffe0ec;
+  --surface-2: #e9f1fb;
+  --border: #d5e3f5;
+  --text: #16233a;
+  --text-dim: #5f7089;
+  --accent: #2563eb;        /* ocean blue — primary */
+  --accent-2: #0ea5c4;      /* cyan — pairs with blue */
+  --accent-soft: #dbe8fe;
   --danger: #e5484d;
   --danger-soft: #ffdfe1;
   --warn: #d9822b;
   --good: #1f9d6b;
-  --shadow: 0 1px 3px rgba(79, 28, 52, 0.10), 0 1px 2px rgba(79, 28, 52, 0.06);
+  --shadow: 0 1px 3px rgba(23, 42, 74, 0.10), 0 1px 2px rgba(23, 42, 74, 0.06);
   --radius: 14px;
 }
 
@@ -81,7 +80,7 @@ body {
 
 /* Hero summary */
 .hero {
-  background: linear-gradient(135deg, #ec5f95 0%, #9b74d4 55%, #6d84e0 100%);
+  background: linear-gradient(135deg, #1e5fd6 0%, #3b82f6 50%, #22b8e6 100%);
   color: #fff;
   border: none;
   padding: 22px;
