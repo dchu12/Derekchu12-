@@ -108,7 +108,8 @@ body {
 .cat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
 .cat-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .cat-emoji { font-size: 18px; }
-.cat-name-block { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cat-row-tap .cat-name { margin-bottom: 6px; }
+.cat-figures { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .cat-spent { font-size: 13px; color: var(--text-dim); }
 .cat-left { font-size: 13px; color: var(--text-dim); text-align: right; white-space: nowrap; }
 .cat-left b { color: var(--text); font-size: 15px; font-weight: 700; }

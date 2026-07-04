@@ -493,11 +493,9 @@
         return `
         <button type="button" class="cat-row cat-row-tap" data-cat="${c.id}"
           aria-label="Log spending for ${esc(c.name)}">
-          <div class="cat-top">
-            <span class="cat-name-block">
-              <span class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}${fixedTag}</span>
-              <span class="cat-spent">${fmt(cs)} of ${fmt(c.budgeted)}</span>
-            </span>
+          <div class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}${fixedTag}</div>
+          <div class="cat-figures">
+            <span class="cat-spent">${fmt(cs)} of ${fmt(c.budgeted)}</span>
             <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
           </div>
           <div class="bar"><div class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></div></div>
@@ -515,7 +513,6 @@
           <div class="hstat"><div class="hk">Budgeted</div><div class="hv">${fmt(budgeted)}</div></div>
           <div class="hstat"><div class="hk">${unbudgeted >= 0 ? "Unbudgeted" : "Over"}</div><div class="hv">${fmt(Math.abs(unbudgeted))}</div></div>
         </div>
-        <div class="hero-foot">Paid ${fmtShort(p.paycheckAmount)} · ${freqLabel(p.frequency).toLowerCase()}</div>
       </div>
 
       <div class="card">
