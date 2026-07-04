@@ -1,21 +1,21 @@
 :root {
-  /* Ocean blue + a cyan that pairs with it.
+  /* Baby blue → Persian blue with a touch of teal.
      Deliberately single-theme (always light) — we ignore device dark mode. */
   color-scheme: light;
-  --bg: #f2f6fd;
+  --bg: #eef4fd;
   --surface: #ffffff;
-  --surface-2: #e9f1fb;
-  --border: #d5e3f5;
-  --text: #16233a;
-  --text-dim: #5f7089;
-  --accent: #2563eb;        /* ocean blue — primary */
-  --accent-2: #0ea5c4;      /* cyan — pairs with blue */
-  --accent-soft: #dbe8fe;
+  --surface-2: #e4eefb;
+  --border: #cfe0f5;
+  --text: #17233f;
+  --text-dim: #5c6b89;
+  --accent: #1c39bb;        /* Persian blue — primary */
+  --accent-2: #14b8a6;      /* teal — the touch */
+  --accent-soft: #dbe4fb;
   --danger: #e5484d;
   --danger-soft: #ffdfe1;
   --warn: #d9822b;
   --good: #1f9d6b;
-  --shadow: 0 1px 3px rgba(23, 42, 74, 0.10), 0 1px 2px rgba(23, 42, 74, 0.06);
+  --shadow: 0 1px 3px rgba(20, 34, 66, 0.10), 0 1px 2px rgba(20, 34, 66, 0.06);
   --radius: 14px;
 }
 
@@ -80,7 +80,7 @@ body {
 
 /* Hero summary */
 .hero {
-  background: linear-gradient(135deg, #1e5fd6 0%, #3b82f6 50%, #22b8e6 100%);
+  background: linear-gradient(135deg, #7fc5ea 0%, #2aa6c4 38%, #2b62cf 70%, #1c39bb 100%);
   color: #fff;
   border: none;
   padding: 22px;
