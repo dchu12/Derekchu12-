@@ -480,27 +480,43 @@
     const saved = p.paycheckAmount - budgeted;
     const dl = daysLeft(p);
 
-    const cats = p.categories
-      .map((c) => {
-        const cs = catSpent(p, c.id);
-        const pct = c.budgeted > 0 ? (cs / c.budgeted) * 100 : 0;
-        const cls = pct > 100 ? "over" : pct > 85 ? "warn" : "ok";
-        const over = cs > c.budgeted + 0.005;
-        const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill">📌</span>` : "";
-        const remainAmt = over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs);
-        const remainLabel = over ? "over" : "left";
-        return `
-        <button type="button" class="cat-row cat-row-tap" data-cat="${c.id}"
+    const renderCat = (c) => {
+      const cs = catSpent(p, c.id);
+      const pct = c.budgeted > 0 ? (cs / c.budgeted) * 100 : 0;
+      const cls = pct > 100 ? "over" : pct > 85 ? "warn" : "ok";
+      const over = cs > c.budgeted + 0.005;
+      const pctLabel = c.budgeted > 0 ? Math.round(pct) + "%" : "—";
+      const remainAmt = over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs);
+      const remainLabel = over ? "over" : "left";
+      const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill">📌</span>` : "";
+      return `
+        <button type="button" class="cat-row cat-row-tap ${over ? "is-over" : ""}" data-cat="${c.id}"
           aria-label="Log spending for ${esc(c.name)}">
-          <div class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}${fixedTag}</div>
-          <div class="cat-figures">
-            <span class="cat-spent">${fmt(cs)} of ${fmt(c.budgeted)}</span>
-            <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
-          </div>
-          <div class="bar"><div class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></div></div>
+          <span class="cat-tile">${esc(c.emoji)}</span>
+          <span class="cat-body">
+            <span class="cat-line">
+              <span class="cat-name">${esc(c.name)}${fixedTag}</span>
+              <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
+            </span>
+            <span class="cat-line cat-sub">
+              <span class="cat-spent"><b>${fmt(cs)}</b> of ${fmt(c.budgeted)}</span>
+              <span class="cat-pct">${pctLabel}</span>
+            </span>
+            <span class="bar"><span class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span>
+          </span>
+          <span class="cat-chevron" aria-hidden="true">›</span>
         </button>`;
-      })
-      .join("");
+    };
+
+    const fixedCats = p.categories.filter((c) => c.fixed);
+    const spendCats = p.categories.filter((c) => !c.fixed);
+    const cats =
+      fixedCats.length && spendCats.length
+        ? `<div class="section-label">Fixed bills</div>` +
+          fixedCats.map(renderCat).join("") +
+          `<div class="section-label cat-section-gap">Spending</div>` +
+          spendCats.map(renderCat).join("")
+        : p.categories.map(renderCat).join("");
 
     main.innerHTML = `
       <div class="card hero">

@@ -108,23 +108,31 @@ body {
 /* Category rows */
 .cat-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .cat-row:last-child { border-bottom: none; }
-.cat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
-.cat-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .cat-emoji { font-size: 18px; }
-.cat-row-tap .cat-name { margin-bottom: 6px; }
-.cat-figures { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
-.cat-spent { font-size: 13px; color: var(--text-dim); }
+/* History detail modal layout */
+.cat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
+.cat-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Dashboard row internals */
+.cat-tile { flex: 0 0 auto; width: 42px; height: 42px; display: grid; place-items: center; font-size: 20px; background: var(--surface-2); border-radius: 12px; }
+.cat-body { flex: 1 1 auto; min-width: 0; }
+.cat-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.cat-sub { margin: 3px 0 8px; }
+.cat-spent { font-size: 12.5px; color: var(--text-dim); }
+.cat-spent b { color: var(--text); font-weight: 600; }
+.cat-pct { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .cat-left { font-size: 13px; color: var(--text-dim); text-align: right; white-space: nowrap; }
 .cat-left b { color: var(--text); font-size: 15px; font-weight: 700; }
 .cat-left .cat-left-label { color: var(--text-dim); font-size: 12px; margin-left: 3px; }
 .cat-left.over b { color: var(--danger); }
+.cat-chevron { flex: 0 0 auto; align-self: center; color: var(--text-dim); font-size: 22px; opacity: 0.45; }
+.cat-section-gap { margin-top: 16px; }
 /* Used in the History detail modal */
 .cat-amounts { font-size: 13px; color: var(--text-dim); text-align: right; }
 .cat-amounts b { color: var(--text); }
 .cat-amounts.over b { color: var(--danger); }
 
-.bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
-.bar-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.bar { display: block; height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
 .bar-fill.ok { background: var(--accent-2); }
 .bar-fill.warn { background: var(--warn); }
 .bar-fill.over { background: var(--danger); }
@@ -306,7 +314,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 
 /* Tappable category rows (buttons that look like rows) */
 .cat-row-tap {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
   text-align: left;
   background: none;
@@ -316,10 +326,13 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   color: inherit;
   cursor: pointer;
   border-radius: 0;
+  padding: 12px 2px;
 }
 .cat-row-tap:last-child { border-bottom: none; }
 .cat-row-tap:hover { background: var(--surface-2); }
-.cat-row-tap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+.cat-row-tap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 10px; }
+.cat-row-tap.is-over { background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.cat-row-tap.is-over .cat-tile { background: color-mix(in srgb, var(--danger) 14%, var(--surface-2)); }
 .cat-fixed { font-size: 12px; opacity: 0.7; margin-left: 4px; }
 
 /* Editable category row: fixed-bill toggle */
