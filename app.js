@@ -9,6 +9,9 @@
   /* Default recipients for the "Email report" button. Change anytime. */
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
+  /* Bump on each release so you can confirm the live version in Settings. */
+  const APP_VERSION = "17";
+
   /* ------------------------------------------------------------------ *
    * State
    * ------------------------------------------------------------------ */
@@ -522,17 +525,23 @@
     const spendCats = p.categories.filter((c) => !c.fixed);
     const fixedCollapsed = !!state.fixedCollapsed;
     const fixedBudgeted = fixedCats.reduce((s, c) => s + Number(c.budgeted), 0);
-    const cats =
-      fixedCats.length && spendCats.length
-        ? `<button type="button" class="section-toggle" id="fixed-toggle" aria-expanded="${!fixedCollapsed}">
-             <span class="section-label" style="margin:0;">Fixed bills</span>
-             <span class="section-meta">${fixedCats.length} · ${fmt(fixedBudgeted)}</span>
-             <span class="section-caret ${fixedCollapsed ? "collapsed" : ""}" aria-hidden="true">▾</span>
-           </button>` +
-          (fixedCollapsed ? "" : fixedCats.map(renderCat).join("")) +
+    let cats;
+    if (fixedCats.length) {
+      cats =
+        `<button type="button" class="section-toggle" id="fixed-toggle" aria-expanded="${!fixedCollapsed}">
+           <span class="section-label" style="margin:0;">Fixed bills</span>
+           <span class="section-meta">${fixedCats.length} · ${fmt(fixedBudgeted)}</span>
+           <span class="section-caret ${fixedCollapsed ? "collapsed" : ""}" aria-hidden="true">▾</span>
+         </button>` +
+        (fixedCollapsed ? "" : fixedCats.map(renderCat).join(""));
+      if (spendCats.length) {
+        cats +=
           `<div class="section-label cat-section-gap">Spending</div>` +
-          spendCats.map(renderCat).join("")
-        : p.categories.map(renderCat).join("");
+          spendCats.map(renderCat).join("");
+      }
+    } else {
+      cats = p.categories.map(renderCat).join("");
+    }
 
     main.innerHTML = `
       ${dl === 0 ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>` : ""}
@@ -1405,6 +1414,7 @@
           <div class="divider"></div>
           <button class="btn btn-danger btn-block btn-sm" id="set-reset">Erase all data</button>
           <button class="btn btn-ghost btn-block" id="set-close" style="margin-top:8px;">Close</button>
+          <p class="footer-note" style="margin-top:14px;">Version ${esc(APP_VERSION)}</p>
         </div>
       </div>
     `);
