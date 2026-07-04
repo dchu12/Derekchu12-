@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "23";
+  const APP_VERSION = "24";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -162,7 +162,8 @@
         text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
       };
     }
-    // On track — mix warm encouragement with wisdom from The Psychology of Money (Morgan Housel).
+    // On track — mix warm encouragement with wisdom from The Psychology of Money
+    // and The Art of Spending Money (both by Morgan Housel).
     const lines = [
       "💙 You're right on track — lovely work. Keep it up!",
       "🌊 Looking good — plenty of comfortable room left this period.",
@@ -171,6 +172,9 @@
       "🕊️ “Controlling your time is the highest dividend money pays.” Staying on budget buys more of it. — The Psychology of Money",
       "🌱 “Building wealth has little to do with your income and a lot to do with your savings rate.” You're doing the part that matters. — The Psychology of Money",
       "☕ “Spending money to show people how much money you have is the fastest way to have less.” Nice and steady wins. — The Psychology of Money",
+      "🛍️ “Spending money is easy. Spending it well is a skill.” And you're getting good at it. — The Art of Spending Money",
+      "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you love. — The Art of Spending Money",
+      "🧭 “The whole point of money is to give you independence and freedom.” Every mindful choice buys a little more. — The Art of Spending Money",
     ];
     const idx = (p.transactions.length + daysLeft(p)) % lines.length;
     return { tone: "ok", text: lines[idx] };
