@@ -83,12 +83,14 @@ body {
   color: #fff;
   border: none;
 }
-.hero .label { font-size: 13px; opacity: 0.85; font-weight: 600; }
-.hero .amount { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0 4px; }
-.hero .period-meta { font-size: 13px; opacity: 0.9; }
-.hero-stats { display: flex; gap: 20px; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.2); }
-.hero-stat .k { font-size: 12px; opacity: 0.85; }
-.hero-stat .v { font-size: 18px; font-weight: 700; }
+.hero .label { font-size: 12px; opacity: 0.85; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.hero .amount { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
+.hero-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.22); }
+.hstat { text-align: center; padding: 0 6px; }
+.hstat + .hstat { border-left: 1px solid rgba(255,255,255,0.18); }
+.hk { font-size: 11px; opacity: 0.8; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; margin-bottom: 4px; }
+.hv { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hero-foot { text-align: center; font-size: 12px; opacity: 0.8; margin-top: 12px; }
 
 .days-pill {
   display: inline-block;

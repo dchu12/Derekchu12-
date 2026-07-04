@@ -508,13 +508,13 @@
       <div class="card hero">
         <div class="label">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
-        <div class="period-meta">of ${fmt(budgeted)} budgeted · paid ${fmtShort(p.paycheckAmount)} ${freqLabel(p.frequency).toLowerCase()}</div>
         <span class="days-pill">${dl} ${dl === 1 ? "day" : "days"} left · ${fmt(Math.max(0, perDay))}/day</span>
-        <div class="hero-stats">
-          <div class="hero-stat"><div class="k">Spent</div><div class="v">${fmt(spent)}</div></div>
-          <div class="hero-stat"><div class="k">Budgeted</div><div class="v">${fmt(budgeted)}</div></div>
-          <div class="hero-stat"><div class="k">${unbudgeted >= 0 ? "Unbudgeted" : "Over-budgeted"}</div><div class="v">${fmt(Math.abs(unbudgeted))}</div></div>
+        <div class="hero-grid">
+          <div class="hstat"><div class="hk">Spent</div><div class="hv">${fmt(spent)}</div></div>
+          <div class="hstat"><div class="hk">Budgeted</div><div class="hv">${fmt(budgeted)}</div></div>
+          <div class="hstat"><div class="hk">${unbudgeted >= 0 ? "Unbudgeted" : "Over"}</div><div class="hv">${fmt(Math.abs(unbudgeted))}</div></div>
         </div>
+        <div class="hero-foot">Paid ${fmtShort(p.paycheckAmount)} · ${freqLabel(p.frequency).toLowerCase()}</div>
       </div>
 
       <div class="card">
