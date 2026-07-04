@@ -203,6 +203,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .alloc-summary .remaining.neg { color: var(--danger); }
 .alloc-summary .remaining.pos { color: var(--good); }
 
+/* Manage-categories rows */
+.mc-row { margin-bottom: 8px; }
+.mc-spent { font-size: 11.5px; color: var(--warn); padding-left: 60px; margin-top: -2px; }
+
 /* Transactions */
 .txn { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
 .txn:last-child { border-bottom: none; }

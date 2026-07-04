@@ -369,9 +369,12 @@
       </div>
 
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Categories</h2>
-          <button class="btn btn-primary btn-sm" id="quick-add">+ Log spend</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" id="manage-cats">✏️ Manage</button>
+            <button class="btn btn-primary btn-sm" id="quick-add">+ Log spend</button>
+          </div>
         </div>
         ${cats}
       </div>
@@ -381,7 +384,144 @@
     `;
 
     document.getElementById("quick-add").addEventListener("click", () => openSpendModal(p));
+    document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
+  }
+
+  /* ---------- Manage categories (add / remove / edit on an active period) ---------- */
+  function openManageCategories(p) {
+    // Working copy — existing rows keep their id so transactions stay linked.
+    let rows = p.categories.map((c) => ({
+      id: c.id,
+      emoji: c.emoji,
+      name: c.name,
+      budgeted: String(c.budgeted),
+    }));
+
+    modalRoot.innerHTML = `
+      <div class="modal-overlay" id="ov">
+        <div class="modal" role="dialog" aria-modal="true">
+          <h2>Manage categories</h2>
+          <p class="sub">Add new ones, remove what you don't need, or adjust an amount. Changes apply to this pay period.</p>
+          <div id="mc-list"></div>
+          <button class="btn btn-ghost btn-sm" id="mc-add">+ Add category</button>
+          <div class="alloc-summary">
+            <span>Total budgeted <b id="mc-total">$0.00</b></span>
+            <span>of ${fmt(p.paycheckAmount)} paycheck</span>
+          </div>
+          <div class="field-row">
+            <button class="btn btn-ghost" id="mc-cancel" style="flex:1;">Cancel</button>
+            <button class="btn btn-primary" id="mc-save" style="flex:2;">Save changes</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const listEl = document.getElementById("mc-list");
+
+    function spentFor(rowId) {
+      return rowId ? catSpent(p, rowId) : 0;
+    }
+
+    function drawRows() {
+      listEl.innerHTML = rows
+        .map((r) => {
+          const spent = spentFor(r.id);
+          const note = spent > 0 ? `<div class="mc-spent">${fmt(spent)} already logged here</div>` : "";
+          return `
+        <div class="mc-row" data-id="${r.id || ""}" data-key="${esc(r._key || (r._key = uid()))}">
+          <div class="alloc-item" style="margin-bottom:2px;">
+            <input class="emoji-in" data-f="emoji" value="${esc(r.emoji)}" maxlength="2" />
+            <input class="name-in" data-f="name" placeholder="Category" value="${esc(r.name)}" />
+            <div class="money-input amt-in">
+              <input data-f="budgeted" type="number" inputmode="decimal" placeholder="0" step="0.01" value="${esc(r.budgeted)}" />
+            </div>
+            <button class="rm" data-rm="${esc(r._key)}" title="Remove">×</button>
+          </div>
+          ${note}
+        </div>`;
+        })
+        .join("");
+      updateTotal();
+    }
+
+    function updateTotal() {
+      const total = rows.reduce((s, r) => s + (Number(r.budgeted) || 0), 0);
+      document.getElementById("mc-total").textContent = fmt(total);
+    }
+
+    listEl.addEventListener("input", (e) => {
+      const rowEl = e.target.closest(".mc-row");
+      if (!rowEl) return;
+      const row = rows.find((r) => r._key === rowEl.dataset.key);
+      if (!row) return;
+      row[e.target.dataset.f] = e.target.value;
+      if (e.target.dataset.f === "budgeted") updateTotal();
+    });
+
+    listEl.addEventListener("click", (e) => {
+      const key = e.target.dataset.rm;
+      if (!key) return;
+      const row = rows.find((r) => r._key === key);
+      const spent = row ? spentFor(row.id) : 0;
+      if (spent > 0) {
+        const n = p.transactions.filter((t) => t.categoryId === row.id).length;
+        if (
+          !confirm(
+            `"${row.name}" has ${n} transaction${n === 1 ? "" : "s"} (${fmt(spent)}) logged.\nRemoving it will also delete those. Continue?`
+          )
+        )
+          return;
+      }
+      rows = rows.filter((r) => r._key !== key);
+      drawRows();
+    });
+
+    document.getElementById("mc-add").addEventListener("click", () => {
+      rows.push({ id: null, emoji: "💵", name: "", budgeted: "", _key: uid() });
+      drawRows();
+      const last = listEl.querySelector(".mc-row:last-child .name-in");
+      if (last) last.focus();
+    });
+
+    const close = () => (modalRoot.innerHTML = "");
+    document.getElementById("mc-cancel").addEventListener("click", close);
+    document.getElementById("ov").addEventListener("click", (e) => {
+      if (e.target.id === "ov") close();
+    });
+
+    document.getElementById("mc-save").addEventListener("click", () => {
+      const kept = rows
+        .filter((r) => r.name.trim())
+        .map((r) => ({
+          id: r.id || uid(),
+          emoji: r.emoji.trim() || "💵",
+          name: r.name.trim(),
+          budgeted: Math.max(0, Number(r.budgeted) || 0),
+        }));
+
+      if (kept.length === 0) {
+        alert("Keep at least one category.");
+        return;
+      }
+
+      // Any transactions whose category was removed get dropped along with it.
+      const keptIds = new Set(kept.map((c) => c.id));
+      p.transactions = p.transactions.filter((t) => keptIds.has(t.categoryId));
+      p.categories = kept;
+
+      // Remember the new layout for the next payday.
+      state.template = {
+        frequency: p.frequency,
+        categories: kept.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted })),
+      };
+
+      save();
+      close();
+      render();
+    });
+
+    drawRows();
   }
 
   /* ---------- Spend view (log + list transactions) ---------- */
