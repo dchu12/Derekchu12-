@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "18";
+  const APP_VERSION = "19";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -123,6 +123,57 @@
         .filter((c) => c.budgeted > 0 && catSpent(p, c.id) > c.budgeted + 0.005)
         .map((c) => c.id)
     );
+  }
+
+  // Categories in the 85%–100% "getting close" zone (not yet over).
+  function closeIds(p) {
+    return new Set(
+      p.categories
+        .filter((c) => {
+          if (c.fixed || !(c.budgeted > 0)) return false;
+          const cs = catSpent(p, c.id);
+          return cs >= c.budgeted * 0.85 && cs <= c.budgeted + 0.005;
+        })
+        .map((c) => c.id)
+    );
+  }
+
+  /* A friendly coach line for the dashboard, based on how the period's going. */
+  function coachMessage(p) {
+    // Only coach on discretionary spending — fixed bills are auto-filled to 100% by design.
+    const cats = p.categories.filter((c) => c.budgeted > 0 && !c.fixed);
+    const over = cats.filter((c) => catSpent(p, c.id) > c.budgeted + 0.005);
+    if (over.length) {
+      const names = over.map((c) => c.name).join(", ");
+      return {
+        tone: "over",
+        text: `🧭 You've slipped a little over on ${names}. No stress — ease up there or trim another category to balance it out.`,
+      };
+    }
+    const close = cats
+      .filter((c) => catSpent(p, c.id) >= c.budgeted * 0.85)
+      .sort((a, b) => catSpent(p, b.id) / b.budgeted - catSpent(p, a.id) / a.budgeted);
+    if (close.length) {
+      const c = close[0];
+      const left = c.budgeted - catSpent(p, c.id);
+      const pct = Math.round((catSpent(p, c.id) / c.budgeted) * 100);
+      return {
+        tone: "close",
+        text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
+      };
+    }
+    // On track — mix encouragement with wisdom from The Psychology of Money (Morgan Housel).
+    const lines = [
+      "💚 Right on track — nice work. Keep it rolling!",
+      "📈 Looking good — plenty of comfortable room left this period.",
+      "✨ “Saving is the gap between your ego and your income.” You're minding that gap well. — The Psychology of Money",
+      "💰 “Wealth is what you don't see.” Every dollar you don't spend is quietly becoming your freedom. — The Psychology of Money",
+      "🕊️ “Controlling your time is the highest dividend money pays.” Staying on budget buys more of it. — The Psychology of Money",
+      "🌱 “Building wealth has little to do with your income and a lot to do with your savings rate.” You're doing the part that matters. — The Psychology of Money",
+      "☕ “Spending money to show people how much money you have is the fastest way to have less.” Steady wins. — The Psychology of Money",
+    ];
+    const idx = (p.transactions.length + daysLeft(p)) % lines.length;
+    return { tone: "ok", text: lines[idx] };
   }
 
   const freqLabel = (f) =>
@@ -491,11 +542,12 @@
     const remaining = budgeted - spent;
     const saved = periodIncome(p) - budgeted;
     const dl = daysLeft(p);
+    const coach = coachMessage(p);
 
     const renderCat = (c) => {
       const cs = catSpent(p, c.id);
       const pct = c.budgeted > 0 ? (cs / c.budgeted) * 100 : 0;
-      const cls = pct > 100 ? "over" : pct > 85 ? "warn" : "ok";
+      const cls = pct > 100 ? "over" : c.fixed ? "ok" : pct > 85 ? "warn" : "ok";
       const over = cs > c.budgeted + 0.005;
       const pctLabel = c.budgeted > 0 ? Math.round(pct) + "%" : "—";
       const remainAmt = over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs);
@@ -549,6 +601,8 @@
         <div class="amount">${fmt(remaining)}</div>
         <div class="days-pill">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`}</div>
       </div>
+
+      <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
 
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
@@ -900,18 +954,29 @@
         description: document.getElementById("sp-desc").value.trim(),
         date: document.getElementById("sp-date").value || todayISO(),
       };
-      const before = overBudgetIds(p);
+      const beforeOver = overBudgetIds(p);
+      const beforeClose = closeIds(p);
       if (editing) {
         Object.assign(editTxn, fields);
       } else {
         p.transactions.push({ id: uid(), ...fields });
       }
       save();
-      const after = overBudgetIds(p);
-      const newlyOver = p.categories.filter((c) => after.has(c.id) && !before.has(c.id));
+      const afterOver = overBudgetIds(p);
+      const afterClose = closeIds(p);
+      const newlyOver = p.categories.filter((c) => afterOver.has(c.id) && !beforeOver.has(c.id));
+      const newlyClose = p.categories.filter(
+        (c) => afterClose.has(c.id) && !beforeClose.has(c.id) && !afterOver.has(c.id)
+      );
       close();
       render();
-      if (newlyOver.length) openOverBudgetAlert(p, newlyOver);
+      if (newlyOver.length) {
+        openOverBudgetAlert(p, newlyOver);
+      } else if (newlyClose.length) {
+        const c = newlyClose[0];
+        const left = c.budgeted - catSpent(p, c.id);
+        showToast(`👀 ${c.name} is almost tapped out — ${fmt(left)} left. You've got this!`);
+      }
     });
   }
 

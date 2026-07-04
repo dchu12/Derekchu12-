@@ -147,6 +147,26 @@ body {
 .bar-fill.warn { background: #00a86b; } /* jade green (Kelly's pick) */
 .bar-fill.over { background: var(--danger); }
 
+/* Coach — friendly encouragement banner */
+.coach {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  font-weight: 500;
+  border: 1px solid transparent;
+  animation: coachIn 0.35s ease both;
+}
+@keyframes coachIn { from { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .coach { animation: none; } }
+.coach-ok { background: var(--accent-soft); color: var(--text); border-color: var(--border); }
+.coach-close { background: #fdf1dd; color: #835b16; border-color: #f3ddb2; }
+.coach-over { background: var(--danger-soft); color: #8a2b2e; border-color: #f2c9c4; }
+
 /* Forms */
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text-dim); }
