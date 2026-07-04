@@ -488,15 +488,17 @@
         const cls = pct > 100 ? "over" : pct > 85 ? "warn" : "ok";
         const over = cs > c.budgeted + 0.005;
         const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill">📌</span>` : "";
+        const remainAmt = over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs);
+        const remainLabel = over ? "over" : "left";
         return `
         <button type="button" class="cat-row cat-row-tap" data-cat="${c.id}"
           aria-label="Log spending for ${esc(c.name)}">
           <div class="cat-top">
-            <span class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}${fixedTag}</span>
-            <span class="cat-amounts ${over ? "over" : ""}">
-              <b>${fmt(cs)}</b> of ${fmt(c.budgeted)}
-              <br />${over ? fmt(cs - c.budgeted) + " over" : fmt(c.budgeted - cs) + " left"}
+            <span class="cat-name-block">
+              <span class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}${fixedTag}</span>
+              <span class="cat-spent">${fmt(cs)} of ${fmt(c.budgeted)}</span>
             </span>
+            <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b>${remainLabel}</span>
           </div>
           <div class="bar"><div class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></div></div>
         </button>`;

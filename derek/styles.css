@@ -102,9 +102,15 @@ body {
 /* Category rows */
 .cat-row { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .cat-row:last-child { border-bottom: none; }
-.cat-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.cat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
 .cat-name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .cat-emoji { font-size: 18px; }
+.cat-name-block { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cat-spent { font-size: 13px; color: var(--text-dim); }
+.cat-left { font-size: 12px; color: var(--text-dim); text-align: right; white-space: nowrap; line-height: 1.25; }
+.cat-left b { display: block; color: var(--text); font-size: 15px; font-weight: 700; }
+.cat-left.over b { color: var(--danger); }
+/* Used in the History detail modal */
 .cat-amounts { font-size: 13px; color: var(--text-dim); text-align: right; }
 .cat-amounts b { color: var(--text); }
 .cat-amounts.over b { color: var(--danger); }
