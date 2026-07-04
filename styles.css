@@ -23,11 +23,13 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv05", "ss01";
 }
 
 #app { max-width: 720px; margin: 0 auto; padding: 0 16px 96px; }
@@ -82,14 +84,15 @@ body {
   background: linear-gradient(135deg, #ec5f95 0%, #9b74d4 55%, #6d84e0 100%);
   color: #fff;
   border: none;
+  padding: 22px;
 }
-.hero .label { font-size: 12px; opacity: 0.85; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
-.hero .amount { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
-.hero-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.22); }
+.hero .label { font-size: 12px; opacity: 0.82; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; }
+.hero .amount { font-size: 46px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.04; margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+.hero-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.28); }
 .hstat { text-align: center; padding: 0 6px; }
-.hstat + .hstat { border-left: 1px solid rgba(255,255,255,0.18); }
-.hk { font-size: 11px; opacity: 0.8; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; margin-bottom: 4px; }
-.hv { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hstat + .hstat { border-left: 1px solid rgba(255,255,255,0.22); }
+.hk { font-size: 10.5px; opacity: 0.8; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.hv { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .hero-foot { text-align: center; font-size: 12px; opacity: 0.8; margin-top: 12px; }
 
 .days-pill {

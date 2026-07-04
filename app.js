@@ -507,7 +507,6 @@
       <div class="card hero">
         <div class="label">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
-        <span class="days-pill">${dl} ${dl === 1 ? "day" : "days"} left · ${fmt(Math.max(0, perDay))}/day</span>
         <div class="hero-grid">
           <div class="hstat"><div class="hk">Spent</div><div class="hv">${fmt(spent)}</div></div>
           <div class="hstat"><div class="hk">${saved >= 0 ? "Saved" : "Over"}</div><div class="hv">${fmt(Math.abs(saved))}</div></div>
