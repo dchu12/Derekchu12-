@@ -479,7 +479,6 @@
     const remaining = budgeted - spent;
     const saved = p.paycheckAmount - budgeted;
     const dl = daysLeft(p);
-    const perDay = dl > 0 ? remaining / dl : remaining;
 
     const cats = p.categories
       .map((c) => {
@@ -507,6 +506,7 @@
       <div class="card hero">
         <div class="label">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
+        <div class="days-pill">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`}</div>
         <div class="hero-grid">
           <div class="hstat"><div class="hk">Spent</div><div class="hv">${fmt(spent)}</div></div>
           <div class="hstat"><div class="hk">${saved >= 0 ? "Saved" : "Over"}</div><div class="hv">${fmt(Math.abs(saved))}</div></div>
