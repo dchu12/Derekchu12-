@@ -1,35 +1,38 @@
 :root {
-  --bg: #f4f6f8;
+  /* Pink blossom + a periwinkle blue that pairs with it */
+  --bg: #fdf4f7;
   --surface: #ffffff;
-  --surface-2: #f0f3f5;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --text-dim: #64748b;
-  --accent: #0f766e;
-  --accent-soft: #ccfbf1;
-  --danger: #dc2626;
-  --danger-soft: #fee2e2;
-  --warn: #d97706;
-  --good: #16a34a;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --surface-2: #fbeaf1;
+  --border: #f3d5e1;
+  --text: #3a2b33;
+  --text-dim: #927e88;
+  --accent: #d6448a;        /* blossom rose — primary */
+  --accent-2: #7f97e0;      /* periwinkle blue — pairs with blossom */
+  --accent-soft: #ffe0ec;
+  --danger: #e5484d;
+  --danger-soft: #ffdfe1;
+  --warn: #d9822b;
+  --good: #1f9d6b;
+  --shadow: 0 1px 3px rgba(79, 28, 52, 0.10), 0 1px 2px rgba(79, 28, 52, 0.06);
   --radius: 14px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0b1120;
-    --surface: #131c2e;
-    --surface-2: #1c2740;
-    --border: #263349;
-    --text: #e2e8f0;
-    --text-dim: #94a3b8;
-    --accent: #2dd4bf;
-    --accent-soft: #134e4a;
-    --danger: #f87171;
-    --danger-soft: #4c1d1d;
+    --bg: #1b1420;
+    --surface: #241a2c;
+    --surface-2: #2f2338;
+    --border: #3d2e47;
+    --text: #f3e6ee;
+    --text-dim: #b49fac;
+    --accent: #f06aa0;
+    --accent-2: #93a6ec;
+    --accent-soft: #4a2337;
+    --danger: #ff7a85;
+    --danger-soft: #4c2230;
     --warn: #fbbf24;
     --good: #4ade80;
-    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -92,12 +95,12 @@ body {
 
 /* Hero summary */
 .hero {
-  background: linear-gradient(135deg, var(--accent), #0d9488);
+  background: linear-gradient(135deg, #ec5f95 0%, #9b74d4 55%, #6d84e0 100%);
   color: #fff;
   border: none;
 }
 @media (prefers-color-scheme: dark) {
-  .hero { background: linear-gradient(135deg, #0f766e, #155e57); }
+  .hero { background: linear-gradient(135deg, #c94f88 0%, #8a63c0 55%, #5f74c4 100%); }
 }
 .hero .label { font-size: 13px; opacity: 0.85; font-weight: 600; }
 .hero .amount { font-size: 42px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0 4px; }
@@ -128,7 +131,7 @@ body {
 
 .bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
-.bar-fill.ok { background: var(--good); }
+.bar-fill.ok { background: var(--accent-2); }
 .bar-fill.warn { background: var(--warn); }
 .bar-fill.over { background: var(--danger); }
 
