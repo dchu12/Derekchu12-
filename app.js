@@ -1011,7 +1011,7 @@
     const status = remaining < -0.005 ? "🔴 over budget" : "✅ within budget";
 
     const lines = [
-      "🐷 Payday Budget — Summary",
+      "🐷 Kelly's Payday Budget — Summary",
       `Pay period starting ${fmtDateLong(p.startDate)}`,
       `${freqLabel(p.frequency)}${active ? ` · ${dl} ${dl === 1 ? "day" : "days"} left` : " · closed"}`,
       "",
