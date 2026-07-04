@@ -113,12 +113,12 @@
 
   /* Default categories offered on first setup. */
   const STARTER_CATEGORIES = [
-    { emoji: "🐕", name: "Toro Insurance", budgeted: "" },
-    { emoji: "🐕", name: "Haku Insurance", budgeted: "" },
-    { emoji: "💍", name: "Kelly · Oura Ring", budgeted: "" },
-    { emoji: "📺", name: "Kelly · Netflix", budgeted: "" },
-    { emoji: "📱", name: "Kelly · Phone", budgeted: "" },
-    { emoji: "☁️", name: "Kelly · Apple Storage", budgeted: "" },
+    { emoji: "🐕", name: "Toro Insurance", budgeted: "", fixed: true },
+    { emoji: "🐕", name: "Haku Insurance", budgeted: "", fixed: true },
+    { emoji: "💍", name: "Kelly · Oura Ring", budgeted: "", fixed: true },
+    { emoji: "📺", name: "Kelly · Netflix", budgeted: "", fixed: true },
+    { emoji: "📱", name: "Kelly · Phone", budgeted: "", fixed: true },
+    { emoji: "☁️", name: "Kelly · Apple Storage", budgeted: "", fixed: true },
     { emoji: "🛒", name: "Groceries", budgeted: "" },
     { emoji: "🍽️", name: "Restaurants", budgeted: "" },
     { emoji: "🥡", name: "Take-Out", budgeted: "" },
@@ -131,11 +131,145 @@
     { emoji: "🧑‍⚕️", name: "Chiro", budgeted: "" },
   ];
 
+  /* Editable category row, shared by the setup and Manage editors.
+   * `id` is the identity used by the surrounding editor (row id or key). */
+  function catEditRow(r, id, opts) {
+    opts = opts || {};
+    const note = opts.note ? `<div class="mc-spent">${esc(opts.note)}</div>` : "";
+    const label = r.name || "category";
+    return `
+      <div class="cat-edit-row" data-row="${esc(id)}">
+        <div class="alloc-item">
+          <input class="emoji-in" data-f="emoji" value="${esc(r.emoji)}" maxlength="2" aria-label="Emoji" />
+          <input class="name-in" data-f="name" placeholder="Category" value="${esc(r.name)}" aria-label="Category name" />
+          <div class="money-input amt-in">
+            <input data-f="budgeted" type="number" inputmode="decimal" placeholder="0" step="0.01" value="${esc(r.budgeted)}" aria-label="Budget amount" />
+          </div>
+          <button type="button" class="rm" data-rm="${esc(id)}" title="Remove ${esc(label)}" aria-label="Remove ${esc(label)}">×</button>
+        </div>
+        <label class="fixed-toggle">
+          <input type="checkbox" data-f="fixed" ${r.fixed ? "checked" : ""} />
+          📌 Fixed bill — auto-logged each payday
+        </label>
+        ${note}
+      </div>`;
+  }
+
   /* ------------------------------------------------------------------ *
    * Rendering
    * ------------------------------------------------------------------ */
   const main = document.getElementById("main");
   const modalRoot = document.getElementById("modal-root");
+
+  /* ------------------------------------------------------------------ *
+   * Modal + toast infrastructure (accessible: Escape, focus trap,
+   * focus restore). Every modal in the app mounts through mountModal.
+   * ------------------------------------------------------------------ */
+  let _lastFocused = null;
+
+  function mountModal(html) {
+    _lastFocused = document.activeElement;
+    modalRoot.innerHTML = html;
+    const overlay = modalRoot.querySelector(".modal-overlay");
+    const modal = modalRoot.querySelector(".modal");
+    modal.setAttribute("tabindex", "-1");
+
+    const focusable = () =>
+      Array.from(
+        modal.querySelectorAll(
+          'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null);
+
+    function onKey(e) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      } else if (e.key === "Tab") {
+        const f = focusable();
+        if (!f.length) return;
+        const first = f[0];
+        const last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    function close() {
+      if (modalRoot.innerHTML === "") return;
+      modalRoot.innerHTML = "";
+      document.removeEventListener("keydown", onKey, true);
+      if (_lastFocused && typeof _lastFocused.focus === "function") {
+        try { _lastFocused.focus(); } catch (e) {}
+      }
+    }
+
+    document.addEventListener("keydown", onKey, true);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close();
+    });
+
+    // Focus the first sensible control (or the dialog itself).
+    setTimeout(() => {
+      const first = modal.querySelector(
+        "input:not([type=hidden]),select,textarea,button"
+      );
+      (first || modal).focus();
+    }, 40);
+
+    return { close, modal };
+  }
+
+  /* Lightweight toast with an optional action (used for Undo). */
+  let _toastTimer = null;
+  function showToast(message, actionLabel, actionFn) {
+    let host = document.getElementById("toast-host");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "toast-host";
+      document.body.appendChild(host);
+    }
+    host.innerHTML = `
+      <div class="toast" role="status">
+        <span>${esc(message)}</span>
+        ${actionLabel ? `<button class="toast-action" type="button">${esc(actionLabel)}</button>` : ""}
+      </div>`;
+    const clear = () => { host.innerHTML = ""; };
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(clear, 5000);
+    if (actionLabel && actionFn) {
+      host.querySelector(".toast-action").addEventListener("click", () => {
+        if (_toastTimer) clearTimeout(_toastTimer);
+        clear();
+        actionFn();
+      });
+    }
+  }
+
+  /* Show an inline validation message under a field (replaces alert()). */
+  function showFieldError(inputEl, message) {
+    clearFieldError(inputEl);
+    inputEl.classList.add("input-invalid");
+    inputEl.setAttribute("aria-invalid", "true");
+    const err = document.createElement("div");
+    err.className = "field-error";
+    err.textContent = message;
+    const container = inputEl.closest(".field") || inputEl.parentElement;
+    container.appendChild(err);
+    inputEl.focus();
+  }
+  function clearFieldError(inputEl) {
+    inputEl.classList.remove("input-invalid");
+    inputEl.removeAttribute("aria-invalid");
+    const container = inputEl.closest(".field") || inputEl.parentElement;
+    const err = container && container.querySelector(".field-error");
+    if (err) err.remove();
+  }
 
   function render() {
     // Sync tab highlight
@@ -224,25 +358,14 @@
       emoji: c.emoji || "💵",
       name: c.name || "",
       budgeted: c.budgeted != null ? String(c.budgeted) : "",
+      fixed: !!c.fixed,
     }));
 
     const listEl = document.getElementById("alloc-list");
     const paycheckEl = document.getElementById("paycheck");
 
     function drawRows() {
-      listEl.innerHTML = rows
-        .map(
-          (r) => `
-        <div class="alloc-item" data-id="${r.id}">
-          <input class="emoji-in" data-f="emoji" value="${esc(r.emoji)}" maxlength="2" />
-          <input class="name-in" data-f="name" placeholder="Category" value="${esc(r.name)}" />
-          <div class="money-input amt-in">
-            <input data-f="budgeted" type="number" inputmode="decimal" placeholder="0" step="0.01" value="${esc(r.budgeted)}" />
-          </div>
-          <button class="rm" data-rm="${r.id}" title="Remove">×</button>
-        </div>`
-        )
-        .join("");
+      listEl.innerHTML = rows.map((r) => catEditRow(r, r.id)).join("");
       updateSummary();
     }
 
@@ -257,12 +380,13 @@
     }
 
     listEl.addEventListener("input", (e) => {
-      const item = e.target.closest(".alloc-item");
+      const item = e.target.closest(".cat-edit-row");
       if (!item) return;
-      const row = rows.find((r) => r.id === item.dataset.id);
+      const row = rows.find((r) => r.id === item.dataset.row);
       if (!row) return;
-      row[e.target.dataset.f] = e.target.value;
-      if (e.target.dataset.f === "budgeted") updateSummary();
+      const f = e.target.dataset.f;
+      row[f] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+      if (f === "budgeted") updateSummary();
     });
 
     listEl.addEventListener("click", (e) => {
@@ -273,9 +397,9 @@
     });
 
     document.getElementById("add-cat").addEventListener("click", () => {
-      rows.push({ id: uid(), emoji: "💵", name: "", budgeted: "" });
+      rows.push({ id: uid(), emoji: "💵", name: "", budgeted: "", fixed: false });
       drawRows();
-      const last = listEl.querySelector(".alloc-item:last-child .name-in");
+      const last = listEl.querySelector(".cat-edit-row:last-child .name-in");
       if (last) last.focus();
     });
 
@@ -284,8 +408,7 @@
     document.getElementById("start-period").addEventListener("click", () => {
       const paycheck = Number(paycheckEl.value);
       if (!paycheck || paycheck <= 0) {
-        alert("Enter the amount you were paid.");
-        paycheckEl.focus();
+        showFieldError(paycheckEl, "Enter the amount you were paid.");
         return;
       }
       const cats = rows
@@ -295,28 +418,42 @@
           emoji: r.emoji.trim() || "💵",
           name: r.name.trim(),
           budgeted: Number(r.budgeted),
+          fixed: !!r.fixed,
         }));
       if (cats.length === 0) {
-        alert("Add at least one budget category with an amount.");
+        showToast("Add at least one category with an amount.");
         return;
       }
 
-      // Close any dangling active period defensively (shouldn't happen here).
+      const startDate = document.getElementById("startDate").value || todayISO();
       const period = {
         id: uid(),
         paycheckAmount: paycheck,
-        startDate: document.getElementById("startDate").value || todayISO(),
+        startDate,
         frequency: document.getElementById("frequency").value,
         categories: cats,
         transactions: [],
         closed: false,
         createdAt: new Date().toISOString(),
       };
+      // Fixed bills are auto-logged as spent on payday.
+      cats.forEach((c) => {
+        if (c.fixed && c.budgeted > 0) {
+          period.transactions.push({
+            id: uid(),
+            categoryId: c.id,
+            amount: c.budgeted,
+            description: c.name,
+            date: startDate,
+            auto: true,
+          });
+        }
+      });
       state.periods.push(period);
-      // Remember layout (names/emojis, not amounts) for next payday.
+      // Remember layout (names/emojis/amounts/fixed) for next payday.
       state.template = {
         frequency: period.frequency,
-        categories: cats.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted })),
+        categories: cats.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed })),
       };
       state.view = "dashboard";
       save();
@@ -341,17 +478,19 @@
         const pct = c.budgeted > 0 ? (cs / c.budgeted) * 100 : 0;
         const cls = pct > 100 ? "over" : pct > 85 ? "warn" : "ok";
         const over = cs > c.budgeted + 0.005;
+        const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill">📌</span>` : "";
         return `
-        <div class="cat-row">
+        <button type="button" class="cat-row cat-row-tap" data-cat="${c.id}"
+          aria-label="Log spending for ${esc(c.name)}">
           <div class="cat-top">
-            <span class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}</span>
+            <span class="cat-name"><span class="cat-emoji">${esc(c.emoji)}</span>${esc(c.name)}${fixedTag}</span>
             <span class="cat-amounts ${over ? "over" : ""}">
               <b>${fmt(cs)}</b> of ${fmt(c.budgeted)}
               <br />${over ? fmt(cs - c.budgeted) + " over" : fmt(c.budgeted - cs) + " left"}
             </span>
           </div>
           <div class="bar"><div class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></div></div>
-        </div>`;
+        </button>`;
       })
       .join("");
 
@@ -386,6 +525,9 @@
     document.getElementById("quick-add").addEventListener("click", () => openSpendModal(p));
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
+    main.querySelectorAll(".cat-row-tap").forEach((el) =>
+      el.addEventListener("click", () => openSpendModal(p, el.dataset.cat))
+    );
   }
 
   /* ---------- Manage categories (add / remove / edit on an active period) ---------- */
@@ -396,11 +538,13 @@
       emoji: c.emoji,
       name: c.name,
       budgeted: String(c.budgeted),
+      fixed: !!c.fixed,
+      _key: uid(),
     }));
 
-    modalRoot.innerHTML = `
-      <div class="modal-overlay" id="ov">
-        <div class="modal" role="dialog" aria-modal="true">
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Manage categories">
           <h2>Manage categories</h2>
           <p class="sub">Add new ones, remove what you don't need, or adjust an amount. Changes apply to this pay period.</p>
           <div id="mc-list"></div>
@@ -415,7 +559,7 @@
           </div>
         </div>
       </div>
-    `;
+    `);
 
     const listEl = document.getElementById("mc-list");
 
@@ -427,19 +571,8 @@
       listEl.innerHTML = rows
         .map((r) => {
           const spent = spentFor(r.id);
-          const note = spent > 0 ? `<div class="mc-spent">${fmt(spent)} already logged here</div>` : "";
-          return `
-        <div class="mc-row" data-id="${r.id || ""}" data-key="${esc(r._key || (r._key = uid()))}">
-          <div class="alloc-item" style="margin-bottom:2px;">
-            <input class="emoji-in" data-f="emoji" value="${esc(r.emoji)}" maxlength="2" />
-            <input class="name-in" data-f="name" placeholder="Category" value="${esc(r.name)}" />
-            <div class="money-input amt-in">
-              <input data-f="budgeted" type="number" inputmode="decimal" placeholder="0" step="0.01" value="${esc(r.budgeted)}" />
-            </div>
-            <button class="rm" data-rm="${esc(r._key)}" title="Remove">×</button>
-          </div>
-          ${note}
-        </div>`;
+          const note = spent > 0 ? `${fmt(spent)} already logged here` : "";
+          return catEditRow(r, r._key, { note });
         })
         .join("");
       updateTotal();
@@ -451,12 +584,13 @@
     }
 
     listEl.addEventListener("input", (e) => {
-      const rowEl = e.target.closest(".mc-row");
+      const rowEl = e.target.closest(".cat-edit-row");
       if (!rowEl) return;
-      const row = rows.find((r) => r._key === rowEl.dataset.key);
+      const row = rows.find((r) => r._key === rowEl.dataset.row);
       if (!row) return;
-      row[e.target.dataset.f] = e.target.value;
-      if (e.target.dataset.f === "budgeted") updateTotal();
+      const f = e.target.dataset.f;
+      row[f] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+      if (f === "budgeted") updateTotal();
     });
 
     listEl.addEventListener("click", (e) => {
@@ -478,17 +612,13 @@
     });
 
     document.getElementById("mc-add").addEventListener("click", () => {
-      rows.push({ id: null, emoji: "💵", name: "", budgeted: "", _key: uid() });
+      rows.push({ id: null, emoji: "💵", name: "", budgeted: "", fixed: false, _key: uid() });
       drawRows();
-      const last = listEl.querySelector(".mc-row:last-child .name-in");
+      const last = listEl.querySelector(".cat-edit-row:last-child .name-in");
       if (last) last.focus();
     });
 
-    const close = () => (modalRoot.innerHTML = "");
     document.getElementById("mc-cancel").addEventListener("click", close);
-    document.getElementById("ov").addEventListener("click", (e) => {
-      if (e.target.id === "ov") close();
-    });
 
     document.getElementById("mc-save").addEventListener("click", () => {
       const kept = rows
@@ -498,10 +628,11 @@
           emoji: r.emoji.trim() || "💵",
           name: r.name.trim(),
           budgeted: Math.max(0, Number(r.budgeted) || 0),
+          fixed: !!r.fixed,
         }));
 
       if (kept.length === 0) {
-        alert("Keep at least one category.");
+        showToast("Keep at least one category.");
         return;
       }
 
@@ -513,7 +644,7 @@
       // Remember the new layout for the next payday.
       state.template = {
         frequency: p.frequency,
-        categories: kept.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted })),
+        categories: kept.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed })),
       };
 
       save();
@@ -538,16 +669,16 @@
             const c = catById[t.categoryId] || { emoji: "❓", name: "Uncategorized" };
             return `
           <div class="txn" data-id="${t.id}">
-            <div class="txn-left">
+            <button type="button" class="txn-left txn-edit" data-edit="${t.id}" aria-label="Edit ${esc(t.description || c.name)}">
               <div class="txn-emoji">${esc(c.emoji)}</div>
               <div>
                 <div class="txn-desc">${esc(t.description || c.name)}</div>
                 <div class="txn-meta">${esc(c.name)} · ${esc(t.date)}</div>
               </div>
-            </div>
+            </button>
             <div style="display:flex;align-items:center;">
               <span class="txn-amt">${fmt(t.amount)}</span>
-              <button class="rm" data-rm="${t.id}" title="Delete">🗑</button>
+              <button class="rm" data-rm="${t.id}" title="Delete" aria-label="Delete ${esc(t.description || c.name)}">🗑</button>
             </div>
           </div>`;
           })
@@ -558,91 +689,115 @@
       <button class="btn btn-primary btn-block" id="add-spend" style="margin-bottom:14px;">+ Log spending</button>
       <div class="card">
         <h2>This period's spending</h2>
-        <p class="sub">${txns.length} ${txns.length === 1 ? "transaction" : "transactions"} · ${fmt(totalSpent(p))} total</p>
+        <p class="sub">${txns.length} ${txns.length === 1 ? "transaction" : "transactions"} · ${fmt(totalSpent(p))} total${txns.length ? " · tap one to edit" : ""}</p>
         ${list}
       </div>
     `;
 
     document.getElementById("add-spend").addEventListener("click", () => openSpendModal(p));
+
+    main.querySelectorAll("[data-edit]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const t = p.transactions.find((x) => x.id === btn.dataset.edit);
+        if (t) openSpendModal(p, null, t);
+      })
+    );
+
     main.querySelectorAll("[data-rm]").forEach((btn) =>
       btn.addEventListener("click", () => {
-        p.transactions = p.transactions.filter((t) => t.id !== btn.dataset.rm);
+        const id = btn.dataset.rm;
+        const idx = p.transactions.findIndex((t) => t.id === id);
+        if (idx === -1) return;
+        const [removed] = p.transactions.splice(idx, 1);
         save();
         render();
+        showToast("Transaction deleted", "Undo", () => {
+          // Restore at its original position.
+          p.transactions.splice(Math.min(idx, p.transactions.length), 0, removed);
+          save();
+          render();
+        });
       })
     );
   }
 
-  function openSpendModal(p, presetCatId) {
+  // editTxn: pass an existing transaction to edit it instead of adding a new one.
+  function openSpendModal(p, presetCatId, editTxn) {
     const cats = p.categories;
-    let selectedCat = presetCatId || cats[0].id;
+    const editing = !!editTxn;
+    let selectedCat =
+      (editTxn && editTxn.categoryId) || presetCatId || cats[0].id;
+    if (!cats.some((c) => c.id === selectedCat)) selectedCat = cats[0].id;
 
-    modalRoot.innerHTML = `
-      <div class="modal-overlay" id="ov">
-        <div class="modal" role="dialog" aria-modal="true">
-          <h2>Log spending</h2>
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="${editing ? "Edit spending" : "Log spending"}">
+          <h2>${editing ? "Edit spending" : "Log spending"}</h2>
           <div class="field money-input">
-            <label>Amount</label>
-            <input id="sp-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01" autofocus />
+            <label for="sp-amount">Amount</label>
+            <input id="sp-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01"
+              value="${editing ? esc(editTxn.amount) : ""}" />
           </div>
           <div class="field">
             <label>Category</label>
-            <div class="chips" id="sp-chips">
+            <div class="chips" id="sp-chips" role="group" aria-label="Category">
               ${cats
                 .map(
                   (c) =>
-                    `<button class="chip ${c.id === selectedCat ? "active" : ""}" data-cat="${c.id}">${esc(c.emoji)} ${esc(c.name)}</button>`
+                    `<button type="button" class="chip ${c.id === selectedCat ? "active" : ""}" data-cat="${c.id}" aria-pressed="${c.id === selectedCat}">${esc(c.emoji)} ${esc(c.name)}</button>`
                 )
                 .join("")}
             </div>
           </div>
           <div class="field">
-            <label>Note (optional)</label>
-            <input id="sp-desc" placeholder="e.g. Groceries at Loblaws" />
+            <label for="sp-desc">Note (optional)</label>
+            <input id="sp-desc" placeholder="e.g. Groceries at Loblaws" value="${editing ? esc(editTxn.description || "") : ""}" />
           </div>
           <div class="field">
-            <label>Date</label>
-            <input id="sp-date" type="date" value="${todayISO()}" />
+            <label for="sp-date">Date</label>
+            <input id="sp-date" type="date" value="${editing ? esc(editTxn.date) : todayISO()}" />
           </div>
           <div class="field-row">
             <button class="btn btn-ghost" id="sp-cancel" style="flex:1;">Cancel</button>
-            <button class="btn btn-primary" id="sp-save" style="flex:2;">Save</button>
+            <button class="btn btn-primary" id="sp-save" style="flex:2;">${editing ? "Save changes" : "Save"}</button>
           </div>
         </div>
       </div>
-    `;
+    `);
 
     const amountEl = document.getElementById("sp-amount");
-    setTimeout(() => amountEl.focus(), 50);
+    amountEl.addEventListener("input", () => clearFieldError(amountEl));
 
     document.getElementById("sp-chips").addEventListener("click", (e) => {
       const btn = e.target.closest("[data-cat]");
       if (!btn) return;
       selectedCat = btn.dataset.cat;
-      document.querySelectorAll("#sp-chips .chip").forEach((c) =>
-        c.classList.toggle("active", c.dataset.cat === selectedCat)
-      );
+      document.querySelectorAll("#sp-chips .chip").forEach((c) => {
+        const on = c.dataset.cat === selectedCat;
+        c.classList.toggle("active", on);
+        c.setAttribute("aria-pressed", on);
+      });
     });
 
-    const close = () => (modalRoot.innerHTML = "");
     document.getElementById("sp-cancel").addEventListener("click", close);
-    document.getElementById("ov").addEventListener("click", (e) => {
-      if (e.target.id === "ov") close();
-    });
 
     document.getElementById("sp-save").addEventListener("click", () => {
       const amount = Number(amountEl.value);
       if (!amount || amount <= 0) {
-        alert("Enter an amount.");
+        showFieldError(amountEl, "Enter an amount greater than zero.");
         return;
       }
-      p.transactions.push({
-        id: uid(),
+      const fields = {
         categoryId: selectedCat,
         amount,
         description: document.getElementById("sp-desc").value.trim(),
         date: document.getElementById("sp-date").value || todayISO(),
-      });
+      };
+      if (editing) {
+        Object.assign(editTxn, fields);
+      } else {
+        p.transactions.push({ id: uid(), ...fields });
+      }
       save();
       close();
       render();
@@ -652,9 +807,9 @@
   /* ---------- New payday confirmation ---------- */
   function confirmNewPayday(p) {
     const remaining = totalBudgeted(p) - totalSpent(p);
-    modalRoot.innerHTML = `
-      <div class="modal-overlay" id="ov">
-        <div class="modal" role="dialog" aria-modal="true">
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Start a new pay period">
           <h2>Start a new pay period?</h2>
           <p class="sub">This closes your current budget and saves it to history. You had
             <b>${fmt(remaining)}</b> left across all categories.</p>
@@ -664,12 +819,8 @@
           </div>
         </div>
       </div>
-    `;
-    const close = () => (modalRoot.innerHTML = "");
+    `);
     document.getElementById("np-cancel").addEventListener("click", close);
-    document.getElementById("ov").addEventListener("click", (e) => {
-      if (e.target.id === "ov") close();
-    });
     document.getElementById("np-go").addEventListener("click", () => {
       p.closed = true;
       p.closedAt = new Date().toISOString();
@@ -747,9 +898,9 @@
       })
       .join("");
 
-    modalRoot.innerHTML = `
-      <div class="modal-overlay" id="ov">
-        <div class="modal" role="dialog" aria-modal="true">
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Pay period details">
           <h2>${esc(fmtDateLong(p.startDate))}</h2>
           <p class="sub">Paid ${fmt(p.paycheckAmount)} · ${freqLabel(p.frequency)} · spent ${fmt(spent)}</p>
           ${cats}
@@ -758,12 +909,8 @@
           <button class="btn btn-ghost btn-block" id="hist-close" style="margin-top:8px;">Close</button>
         </div>
       </div>
-    `;
-    const close = () => (modalRoot.innerHTML = "");
+    `);
     document.getElementById("hist-close").addEventListener("click", close);
-    document.getElementById("ov").addEventListener("click", (e) => {
-      if (e.target.id === "ov") close();
-    });
     document.getElementById("hist-del").addEventListener("click", () => {
       if (confirm("Delete this pay period record permanently?")) {
         state.periods = state.periods.filter((x) => x.id !== id);
@@ -914,6 +1061,108 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Settings — back up (export) and restore (import) all data
+   * ------------------------------------------------------------------ */
+  function exportData() {
+    const payload = JSON.stringify(state, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payday-budget-backup-${todayISO()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function isValidBackup(obj) {
+    return obj && typeof obj === "object" && Array.isArray(obj.periods);
+  }
+
+  function importData(text) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e) {
+      showToast("That file isn't a valid backup.");
+      return;
+    }
+    if (!isValidBackup(parsed)) {
+      showToast("That file doesn't look like a Payday Budget backup.");
+      return;
+    }
+    const periods = parsed.periods.length;
+    if (
+      !confirm(
+        `Restore this backup? It has ${periods} pay period${periods === 1 ? "" : "s"} and will REPLACE everything currently in the app.`
+      )
+    )
+      return;
+    state = Object.assign(defaultState(), parsed);
+    state.view = "dashboard";
+    save();
+    render();
+    showToast("Backup restored ✓");
+  }
+
+  function openSettings() {
+    const periods = state.periods.length;
+    const txns = state.periods.reduce((s, p) => s + p.transactions.length, 0);
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
+          <h2>Settings &amp; backup</h2>
+          <p class="sub">Your budget lives only on this device. Back it up so you never lose it if you clear your browser or switch phones.</p>
+
+          <div class="settings-stat">${periods} pay period${periods === 1 ? "" : "s"} · ${txns} transaction${txns === 1 ? "" : "s"} stored</div>
+
+          <button class="btn btn-primary btn-block" id="set-export">⬇️ Download backup</button>
+          <p class="footer-note" style="margin:8px 0 16px;">Saves a <code>.json</code> file you can keep safe or move to another device.</p>
+
+          <label class="btn btn-ghost btn-block" for="set-import-file" style="cursor:pointer;">⬆️ Restore from backup</label>
+          <input type="file" id="set-import-file" accept="application/json,.json" style="position:absolute;width:1px;height:1px;opacity:0;" />
+          <p class="footer-note" style="margin:8px 0 16px;">Restoring replaces everything currently in the app.</p>
+
+          <div class="divider"></div>
+          <button class="btn btn-danger btn-block btn-sm" id="set-reset">Erase all data</button>
+          <button class="btn btn-ghost btn-block" id="set-close" style="margin-top:8px;">Close</button>
+        </div>
+      </div>
+    `);
+
+    document.getElementById("set-export").addEventListener("click", exportData);
+
+    document.getElementById("set-import-file").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        close();
+        importData(String(reader.result));
+      };
+      reader.onerror = () => showToast("Couldn't read that file.");
+      reader.readAsText(file);
+    });
+
+    document.getElementById("set-reset").addEventListener("click", () => {
+      if (
+        confirm(
+          "Erase ALL data permanently? This can't be undone. Download a backup first if you're not sure."
+        )
+      ) {
+        state = defaultState();
+        save();
+        close();
+        render();
+        showToast("All data erased.");
+      }
+    });
+
+    document.getElementById("set-close").addEventListener("click", close);
+  }
+
+  /* ------------------------------------------------------------------ *
    * Tab navigation
    * ------------------------------------------------------------------ */
   document.getElementById("tabs").addEventListener("click", (e) => {
@@ -922,6 +1171,9 @@
     state.view = tab.dataset.view;
     render();
   });
+
+  const settingsBtn = document.getElementById("settings-btn");
+  if (settingsBtn) settingsBtn.addEventListener("click", openSettings);
 
   /* Boot */
   render();

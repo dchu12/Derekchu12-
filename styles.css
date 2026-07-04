@@ -275,3 +275,96 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 
 .footer-note { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 20px; }
 .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* Header settings button */
+.brand { position: relative; }
+.icon-btn {
+  margin-left: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 40px; height: 40px;
+  border-radius: 11px;
+  font-size: 18px;
+  cursor: pointer;
+  display: grid; place-items: center;
+}
+.icon-btn:active { transform: scale(0.96); }
+
+/* Tappable category rows (buttons that look like rows) */
+.cat-row-tap {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 0;
+}
+.cat-row-tap:last-child { border-bottom: none; }
+.cat-row-tap:hover { background: var(--surface-2); }
+.cat-row-tap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 8px; }
+.cat-fixed { font-size: 12px; opacity: 0.7; margin-left: 4px; }
+
+/* Editable category row: fixed-bill toggle */
+.cat-edit-row { margin-bottom: 12px; padding-bottom: 4px; }
+.fixed-toggle {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--text-dim);
+  padding: 2px 2px 2px 60px;
+  cursor: pointer;
+}
+.fixed-toggle input { width: auto; margin: 0; accent-color: var(--accent); }
+
+/* Bigger, accessible tap targets for icon buttons */
+.rm { min-width: 40px; min-height: 40px; }
+.rm:focus-visible, .icon-btn:focus-visible, .chip:focus-visible,
+.txn-edit:focus-visible, .tab:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+/* Editable transaction (tap to edit) */
+.txn-edit {
+  background: none; border: none; font: inherit; color: inherit;
+  text-align: left; cursor: pointer; padding: 0; flex: 1; min-width: 0;
+  border-radius: 8px;
+}
+.txn-edit:hover .txn-desc { text-decoration: underline; }
+
+/* Inline field validation */
+.field-error { color: var(--danger); font-size: 12.5px; margin-top: 6px; font-weight: 600; }
+.input-invalid { border-color: var(--danger) !important; outline-color: var(--danger) !important; }
+
+/* Settings */
+.settings-stat {
+  background: var(--surface-2); border-radius: 10px; padding: 10px 12px;
+  font-size: 13px; color: var(--text-dim); text-align: center; margin-bottom: 16px;
+}
+
+/* Toast */
+#toast-host {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  display: flex; justify-content: center;
+  padding: 0 16px calc(18px + env(safe-area-inset-bottom));
+  z-index: 200; pointer-events: none;
+}
+#toast-host:empty { display: none; }
+.toast {
+  pointer-events: auto;
+  background: #2b1c24; color: #fff;
+  border-radius: 12px; padding: 12px 16px;
+  display: flex; align-items: center; gap: 16px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+  max-width: 480px; width: 100%;
+  font-size: 14px; font-weight: 500;
+  animation: slideUp 0.2s ease;
+}
+.toast-action {
+  background: none; border: none; color: var(--accent);
+  font-weight: 700; font-size: 14px; cursor: pointer; padding: 4px 6px;
+  margin-left: auto; white-space: nowrap;
+}
+.toast-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
