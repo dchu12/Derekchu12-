@@ -144,7 +144,7 @@ body {
 @keyframes barGrow { from { width: 0; } }
 @media (prefers-reduced-motion: reduce) { .bar-fill { animation: none; } }
 .bar-fill.ok { background: var(--accent-2); }
-.bar-fill.warn { background: var(--warn); }
+.bar-fill.warn { background: #00a86b; } /* jade green (Kelly's pick) */
 .bar-fill.over { background: var(--danger); }
 
 /* Forms */
