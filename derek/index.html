@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#12874c" />
+  <title>Payday Budget — Derek</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="logo">🐷</span>
+        <h1>Payday Budget</h1>
+        <button class="icon-btn" id="settings-btn" aria-label="Settings and backup" title="Settings &amp; backup">⚙️</button>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-view="dashboard">Overview</button>
+        <button class="tab" data-view="spend">Spend</button>
+        <button class="tab" data-view="history">History</button>
+        <button class="tab" data-view="report">Report</button>
+      </nav>
+    </header>
+
+    <main id="main">
+      <!-- Views are rendered here by app.js -->
+    </main>
+  </div>
+
+  <!-- Modal host -->
+  <div id="modal-root"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
