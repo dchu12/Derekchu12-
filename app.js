@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "67";
+  const APP_VERSION = "68";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -942,7 +942,7 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Expense Categories</h2>
-          <button class="btn btn-ghost btn-sm" id="manage-cats">Manage</button>
+          <button class="icon-btn" id="manage-cats" aria-label="Manage categories" title="Manage categories">⚙️</button>
         </div>
         ${cats}
       </div>
@@ -1232,14 +1232,23 @@
 
   /* ---------- Spend view (log + list transactions) ---------- */
   function renderSpend(p) {
-    const txns = [...p.transactions].sort((a, b) =>
-      (b.date + b.id).localeCompare(a.date + a.id)
-    );
+    const sortOrder = state._spendSort === "oldest" ? "oldest" : "newest";
+    const txns = [...p.transactions].sort((a, b) => {
+      const cmp = (a.date + a.id).localeCompare(b.date + b.id);
+      return sortOrder === "oldest" ? cmp : -cmp;
+    });
 
     const catById = Object.fromEntries(p.categories.map((c) => [c.id, c]));
+    const total = totalSpent(p);
+    const count = p.transactions.length;
+    const avgPerTxn = count ? total / count : 0;
+    const topCat = p.categories
+      .map((c) => ({ c, amt: catSpent(p, c.id) }))
+      .filter((x) => x.amt > 0)
+      .sort((a, b) => b.amt - a.amt)[0];
 
     // Optional filter by category (tap a chip). Transient, per-device.
-    const usedCatIds = [...new Set(txns.map((t) => t.categoryId))];
+    const usedCatIds = [...new Set(p.transactions.map((t) => t.categoryId))];
     let activeFilter = state._spendFilter || "all";
     if (activeFilter !== "all" && !usedCatIds.includes(activeFilter)) activeFilter = "all";
     const filtered = activeFilter === "all" ? txns : txns.filter((t) => t.categoryId === activeFilter);
@@ -1255,6 +1264,13 @@
                  `<button type="button" class="chip ${activeFilter === c.id ? "active" : ""}" data-f="${c.id}">${esc(c.emoji)} ${esc(c.name)}</button>`
              )
              .join("")}
+         </div>`
+      : "";
+
+    const sortRow = txns.length
+      ? `<div class="chips sort-row" id="spend-sort" role="group" aria-label="Sort by date">
+           <button type="button" class="chip ${sortOrder === "newest" ? "active" : ""}" data-sort="newest">Newest first</button>
+           <button type="button" class="chip ${sortOrder === "oldest" ? "active" : ""}" data-sort="oldest">Oldest first</button>
          </div>`
       : "";
 
@@ -1278,24 +1294,40 @@
           </div>`;
           })
           .join("")
-      : `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" ? "No spending logged yet this period." : "No spending in this category yet."}</p></div>`;
+      : `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" ? "No spending logged yet this period. Tap “Log spend” up top to add one." : "No spending in this category yet."}</p></div>`;
 
     const subline =
       activeFilter === "all"
-        ? `${txns.length} ${txns.length === 1 ? "transaction" : "transactions"} · ${fmt(totalSpent(p))} total${txns.length ? " · tap one to edit" : ""}`
+        ? `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"}${txns.length ? " · tap one to edit" : ""}`
         : `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"} · ${fmt(filteredTotal)} in ${esc((catById[activeFilter] || {}).name || "category")}`;
 
     main.innerHTML = `
-      <button class="btn btn-primary btn-block" id="add-spend" style="margin-bottom:14px;">Log spending</button>
+      <div class="card spend-sum">
+        <div class="ss-label">Spent this period</div>
+        <div class="ss-total">${fmt(total)}</div>
+        <div class="ss-range">${esc(periodRangeLabel(p))}</div>
+        <div class="ss-grid">
+          <div class="sstat"><div class="sv">${count}</div><div class="sk">${count === 1 ? "Transaction" : "Transactions"}</div></div>
+          <div class="sstat"><div class="sv">${fmt(avgPerTxn)}</div><div class="sk">Avg / txn</div></div>
+          <div class="sstat"><div class="sv sv-emoji">${topCat ? esc(topCat.c.emoji) : "—"}</div><div class="sk">${topCat ? esc(topCat.c.name) : "Top category"}</div></div>
+        </div>
+      </div>
       <div class="card">
-        <h2>${esc(periodRangeLabel(p))} spending</h2>
-        <p class="sub">${subline}</p>
+        <p class="sub" style="margin-top:0;">${subline}</p>
         ${filterRow}
+        ${sortRow}
         ${list}
       </div>
     `;
 
-    document.getElementById("add-spend").addEventListener("click", () => openSpendModal(p));
+    const sortEl = document.getElementById("spend-sort");
+    if (sortEl)
+      sortEl.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-sort]");
+        if (!b) return;
+        state._spendSort = b.dataset.sort;
+        render();
+      });
 
     const filterEl = document.getElementById("spend-filter");
     if (filterEl)
