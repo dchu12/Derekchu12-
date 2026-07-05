@@ -99,7 +99,7 @@ body {
   cursor: pointer; white-space: nowrap;
 }
 .hero-days:active { background: rgba(255,255,255,0.3); }
-.hero-eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8; margin-bottom: 6px; }
+.hero-eyebrow { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8; margin-bottom: 6px; }
 .hero .amount { font-size: 46px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin: 0; font-variant-numeric: tabular-nums; }
 .hero-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.28); }
 .hstat { text-align: center; padding: 0 6px; }

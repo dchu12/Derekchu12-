@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "58";
+  const APP_VERSION = "59";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -949,7 +949,7 @@
         <div class="stat-grid">
           <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
           <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
-          <div class="sstat"><div class="sk">${saved >= 0 ? "Unbudgeted" : "Over-budget"}</div><div class="sv ${saved < 0 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
+          <div class="sstat"><div class="sk">${saved >= 0 ? "Saved" : "Over budget"}</div><div class="sv ${saved < 0 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
         </div>
       </div>
 
@@ -1942,7 +1942,7 @@
       pad("Budgeted", fmt(budgeted)),
       pad("Spent", fmt(spent)),
       pad(active ? "Remaining" : "Left over", `${fmt(active ? remaining : saved)}  ${status}`),
-      pad(unbudgeted >= 0 ? "Unbudgeted" : "Over-budget", fmt(Math.abs(unbudgeted))),
+      pad(unbudgeted >= 0 ? "Saved" : "Over budget", fmt(Math.abs(unbudgeted))),
       "",
       "By category (most spent first):",
       catLines || "  (no spending yet)",
