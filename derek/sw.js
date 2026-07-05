@@ -1,6 +1,6 @@
 /* Payday Budget service worker — offline support + fresh updates.
  * Network-first: online always gets the latest; offline falls back to cache. */
-const CACHE = "payday-derek-v5";
+const CACHE = "payday-derek-v6";
 const CORE = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.json"];
 
 self.addEventListener("install", (e) => {

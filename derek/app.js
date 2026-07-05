@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "21";
+  const APP_VERSION = "22";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -232,9 +232,13 @@
     opts = opts || {};
     const note = opts.note ? `<div class="mc-spent">${esc(opts.note)}</div>` : "";
     const label = r.name || "category";
+    const grip = opts.drag
+      ? `<button type="button" class="mc-drag" data-drag aria-label="Reorder ${esc(label)} — drag, or use arrow keys" title="Drag to reorder">⠿</button>`
+      : "";
     return `
-      <div class="cat-edit-row" data-row="${esc(id)}">
+      <div class="cat-edit-row${opts.drag ? " has-drag" : ""}" data-row="${esc(id)}">
         <div class="alloc-item">
+          ${grip}
           <input class="emoji-in" data-f="emoji" value="${esc(r.emoji)}" maxlength="2" aria-label="Emoji" />
           <input class="name-in" data-f="name" placeholder="Category" value="${esc(r.name)}" aria-label="Category name" />
           <div class="money-input amt-in">
@@ -248,6 +252,71 @@
         </label>
         ${note}
       </div>`;
+  }
+
+  /* Pointer + keyboard reordering for the category editors.
+   * Drag a row's grip (works with touch and mouse), or focus it and press
+   * ArrowUp/ArrowDown. `applyOrder` receives the new list of data-row keys,
+   * top to bottom, so each editor can re-sort its own working array. */
+  function enableRowDrag(listEl, applyOrder) {
+    let dragEl = null;
+
+    const syncOrder = () =>
+      applyOrder(Array.from(listEl.querySelectorAll(".cat-edit-row")).map((el) => el.dataset.row));
+
+    listEl.addEventListener("pointerdown", (e) => {
+      const handle = e.target.closest("[data-drag]");
+      if (!handle) return;
+      const rowEl = handle.closest(".cat-edit-row");
+      if (!rowEl) return;
+      e.preventDefault();
+      dragEl = rowEl;
+      rowEl.classList.add("dragging");
+
+      const move = (ev) => {
+        if (!dragEl) return;
+        ev.preventDefault();
+        const y = ev.clientY;
+        const others = Array.from(listEl.querySelectorAll(".cat-edit-row:not(.dragging)"));
+        let ref = null;
+        for (const el of others) {
+          const box = el.getBoundingClientRect();
+          if (y < box.top + box.height / 2) {
+            ref = el;
+            break;
+          }
+        }
+        if (ref) listEl.insertBefore(dragEl, ref);
+        else listEl.appendChild(dragEl);
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        if (!dragEl) return;
+        dragEl.classList.remove("dragging");
+        dragEl = null;
+        syncOrder();
+      };
+      window.addEventListener("pointermove", move, { passive: false });
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    });
+
+    listEl.addEventListener("keydown", (e) => {
+      const handle = e.target.closest("[data-drag]");
+      if (!handle || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+      const rowEl = handle.closest(".cat-edit-row");
+      if (!rowEl) return;
+      e.preventDefault();
+      if (e.key === "ArrowUp" && rowEl.previousElementSibling) {
+        listEl.insertBefore(rowEl, rowEl.previousElementSibling);
+      } else if (e.key === "ArrowDown" && rowEl.nextElementSibling) {
+        listEl.insertBefore(rowEl.nextElementSibling, rowEl);
+      }
+      handle.focus();
+      syncOrder();
+    });
   }
 
   /* ------------------------------------------------------------------ *
@@ -460,9 +529,13 @@
     const paycheckEl = document.getElementById("paycheck");
 
     function drawRows() {
-      listEl.innerHTML = rows.map((r) => catEditRow(r, r.id)).join("");
+      listEl.innerHTML = rows.map((r) => catEditRow(r, r.id, { drag: true })).join("");
       updateSummary();
     }
+
+    enableRowDrag(listEl, (order) => {
+      rows.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    });
 
     function updateSummary() {
       const paycheck = Number(paycheckEl.value) || 0;
@@ -747,6 +820,10 @@
 
     const listEl = document.getElementById("mc-list");
 
+    enableRowDrag(listEl, (order) => {
+      rows.sort((a, b) => order.indexOf(a._key) - order.indexOf(b._key));
+    });
+
     function spentFor(rowId) {
       return rowId ? catSpent(p, rowId) : 0;
     }
@@ -756,7 +833,7 @@
         .map((r) => {
           const spent = spentFor(r.id);
           const note = spent > 0 ? `${fmt(spent)} already logged here` : "";
-          return catEditRow(r, r._key, { note });
+          return catEditRow(r, r._key, { note, drag: true });
         })
         .join("");
       updateTotal();

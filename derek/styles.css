@@ -223,6 +223,26 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .alloc-item .name-in { flex: 1; }
 .alloc-item .amt-in { width: 110px; }
 .alloc-item .rm { background: none; border: none; color: var(--text-dim); font-size: 20px; cursor: pointer; padding: 4px 8px; }
+/* Drag-to-reorder handle */
+.alloc-item .mc-drag {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: grab;
+  padding: 8px 2px;
+  margin-left: -4px;
+  align-self: stretch;
+  touch-action: none;
+  border-radius: 8px;
+}
+.alloc-item .mc-drag:active { cursor: grabbing; }
+.alloc-item .mc-drag:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.has-drag .alloc-item .emoji-in { width: 44px; }
+.has-drag .alloc-item .amt-in { width: 96px; }
+.cat-edit-row.dragging { opacity: 0.6; }
+.cat-edit-row.dragging .alloc-item { background: var(--accent-soft); border-radius: 12px; }
 
 .alloc-summary {
   display: flex;
