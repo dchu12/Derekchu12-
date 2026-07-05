@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "36";
+  const APP_VERSION = "37";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1692,6 +1692,33 @@
     return { subject, text: lines.join("\n") };
   }
 
+  // Build a spreadsheet-friendly CSV of a period's transactions.
+  function buildCSV(p) {
+    const catById = Object.fromEntries(p.categories.map((c) => [c.id, c]));
+    const cell = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+    const rows = [["Date", "Category", "Description", "Amount", "Type"]];
+    [...p.transactions]
+      .sort((a, b) => (a.date + a.id).localeCompare(b.date + b.id))
+      .forEach((t) => {
+        const c = catById[t.categoryId] || { name: "Uncategorized", fixed: false };
+        rows.push([t.date, c.name, t.description || "", Number(t.amount).toFixed(2), c.fixed ? "Fixed" : "Spending"]);
+      });
+    return rows.map((r) => r.map(cell).join(",")).join("\r\n");
+  }
+
+  function exportCSV(p) {
+    // Prepend a BOM so Excel reads UTF-8 (emoji, accents) correctly.
+    const blob = new Blob(["﻿" + buildCSV(p)], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payday-budget-${p.startDate}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   function renderReport() {
     // Newest first: active period, then closed periods.
     const periods = state.periods.slice().reverse();
@@ -1731,7 +1758,8 @@
           <button class="btn btn-ghost" id="rp-email" style="flex:1;">✉️ Email report</button>
           <button class="btn btn-ghost" id="rp-copy" style="flex:1;">📋 Copy</button>
         </div>
-        <p class="footer-note">"Email report" opens a draft to ${esc(REPORT_EMAILS.join(" and "))}.</p>
+        <button class="btn btn-ghost btn-block" id="rp-csv" style="margin-top:10px;">⬇️ Export CSV</button>
+        <p class="footer-note">"Email report" opens a draft to ${esc(REPORT_EMAILS.join(" and "))}. "Export CSV" downloads this period's transactions.</p>
       </div>
     `;
 
@@ -1779,6 +1807,11 @@
       const orig = btn.textContent;
       btn.textContent = "✓ Copied";
       setTimeout(() => (btn.textContent = orig), 1500);
+    });
+
+    document.getElementById("rp-csv").addEventListener("click", () => {
+      exportCSV(selected);
+      showToast("CSV downloaded ✓");
     });
   }
 
