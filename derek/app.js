@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "48";
+  const APP_VERSION = "49";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -436,7 +436,7 @@
         </div>
         <div class="cat-opts">
           <label class="opt-toggle" title="Auto-logged as spent each payday">
-            <input type="checkbox" data-f="fixed" ${r.fixed ? "checked" : ""} /> 📌 Fixed bill
+            <input type="checkbox" data-f="fixed" ${r.fixed ? "checked" : ""} /> Fixed bill
           </label>
           <label class="opt-toggle" title="Carry any leftover into next period">
             <input type="checkbox" data-f="rollover" ${r.rollover ? "checked" : ""} /> 🔄 Rollover
@@ -867,7 +867,7 @@
       const pctLabel = c.budgeted > 0 ? Math.round(pct) + "%" : "—";
       const remainAmt = over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs);
       const remainLabel = over ? "over" : "left";
-      const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill">📌</span>` : "";
+      const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill">Fixed</span>` : "";
       return `
         <button type="button" class="cat-row cat-row-tap ${over ? "is-over" : ""}" data-cat="${c.id}"
           aria-label="Log spending for ${esc(c.name)}">
@@ -952,7 +952,7 @@
         </div>
       </div>
 
-      <button class="btn btn-ghost btn-block" id="add-income">➕ Add extra income</button>
+      <button class="btn btn-ghost btn-block" id="add-income">Add extra income</button>
       <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">Got paid? Start a new pay period</button>
     `;
 
