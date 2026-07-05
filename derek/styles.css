@@ -50,7 +50,7 @@ body {
 }
 .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .brand h1.wordmark {
-  font-size: 27px; font-weight: 800; letter-spacing: -0.035em; width: max-content;
+  font-size: 32px; font-weight: 800; letter-spacing: -0.035em; width: max-content;
   background: linear-gradient(120deg, #2eb877 0%, #1f9e52 55%, #0d6e3c 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
