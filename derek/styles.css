@@ -86,16 +86,22 @@ body {
 
 /* Hero summary */
 .hero {
-  background: linear-gradient(135deg, #0f9a52 0%, #4aa63f 50%, #d99a1f 100%);
+  background: linear-gradient(135deg, #0f9a52 0%, #2f9e46 55%, #12874c 100%);
   color: #fff;
   border: none;
   padding: 22px;
 }
 .hero .label { font-size: 12px; opacity: 0.82; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; }
+.hero-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
 .hero-greet { font-size: 15px; font-weight: 600; opacity: 0.92; letter-spacing: -0.01em; }
-.hero-amount-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
-.hero .amount { font-size: 44px; font-weight: 800; letter-spacing: -0.025em; line-height: 1.02; margin: 0; font-variant-numeric: tabular-nums; }
-.amount-cap { font-size: 14px; font-weight: 600; opacity: 0.82; }
+.hero-days {
+  background: rgba(255,255,255,0.18); color: #fff; border: none; font-family: inherit;
+  font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+  cursor: pointer; white-space: nowrap;
+}
+.hero-days:active { background: rgba(255,255,255,0.3); }
+.hero-eyebrow { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.8; margin-bottom: 6px; }
+.hero .amount { font-size: 46px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin: 0; font-variant-numeric: tabular-nums; }
 .hero-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 22px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.28); }
 .hstat { text-align: center; padding: 0 6px; }
 .hstat + .hstat { border-left: 1px solid rgba(255,255,255,0.22); }
