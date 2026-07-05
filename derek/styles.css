@@ -49,8 +49,7 @@ body {
   box-shadow: 0 2px 6px rgba(18, 135, 76, 0.28);
 }
 .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-.wordmark { display: flex; align-items: baseline; gap: 7px; }
-.wordmark-jp { font-size: 12px; font-weight: 600; color: var(--text-dim); letter-spacing: 0.04em; }
+.wordmark { font-weight: 800; letter-spacing: -0.03em; }
 
 .tabs {
   display: flex;
