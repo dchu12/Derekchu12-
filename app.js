@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "40";
+  const APP_VERSION = "41";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -24,10 +24,22 @@
   const defaultState = () => ({
     periods: [],          // list of pay periods, newest last
     template: null,       // remembered category layout for the next payday
-    goal: null,           // optional savings goal { name, target }
+    goals: [],            // savings goals/jars: { id, emoji, name, target, saved }
     fixedCollapsed: false, // whether the Fixed bills section is collapsed
     view: "dashboard",
   });
+
+  // Migrate older shapes forward (single `goal` → `goals` array).
+  // Uses an inline id (runs during initial load, before `uid` is initialized).
+  function migrateState(s) {
+    const gid = () => "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    if (s.goal && (!Array.isArray(s.goals) || !s.goals.length)) {
+      s.goals = [{ id: gid(), emoji: "🎯", name: s.goal.name || "Savings goal", target: Number(s.goal.target) || 0, saved: 0 }];
+    }
+    delete s.goal;
+    if (!Array.isArray(s.goals)) s.goals = [];
+    return s;
+  }
 
   let state = load();
 
@@ -46,7 +58,7 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaultState();
       const parsed = JSON.parse(raw);
-      return Object.assign(defaultState(), parsed);
+      return migrateState(Object.assign(defaultState(), parsed));
     } catch (e) {
       console.warn("Failed to load state, starting fresh.", e);
       return defaultState();
@@ -1472,15 +1484,29 @@
          </div>`
       : "";
 
-    const goal = state.goal;
-    const goalPct = goal && goal.target > 0 ? Math.min(100, (Math.max(0, totalSaved) / goal.target) * 100) : 0;
-    const goalHtml = goal
-      ? `<button type="button" class="goal" id="goal-edit">
-           <div class="goal-top"><span class="goal-name">🎯 ${esc(goal.name)}</span><span class="goal-nums">${fmt(Math.max(0, totalSaved))} / ${fmt(goal.target)}</span></div>
-           <div class="bar"><div class="bar-fill ok" style="width:${goalPct}%"></div></div>
-           <div class="goal-sub">${totalSaved >= goal.target ? "Goal reached! 🎉" : fmt(goal.target - Math.max(0, totalSaved)) + " to go"}</div>
-         </button>`
-      : `<button class="btn btn-ghost btn-sm" id="set-goal-btn" style="margin-top:12px;">🎯 Set a savings goal</button>`;
+    const goals = state.goals || [];
+    const goalsCard = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${goals.length ? "10px" : "6px"};gap:8px;">
+          <h2 style="margin:0;">Savings goals</h2>
+          <button class="btn btn-ghost btn-sm" id="goal-add" style="margin:0;">+ Add goal</button>
+        </div>
+        ${
+          goals.length
+            ? goals
+                .map((g) => {
+                  const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
+                  const done = g.target > 0 && g.saved >= g.target - 0.005;
+                  return `<button type="button" class="goal" data-goal="${g.id}">
+                     <div class="goal-top"><span class="goal-name">${esc(g.emoji || "🎯")} ${esc(g.name)}</span><span class="goal-nums">${fmt(g.saved)} / ${fmt(g.target)}</span></div>
+                     <div class="bar"><div class="bar-fill ok" style="width:${pct}%"></div></div>
+                     <div class="goal-sub">${done ? "Reached! 🎉" : fmt(g.target - g.saved) + " to go"}</div>
+                   </button>`;
+                })
+                .join("")
+            : `<p class="sub" style="margin:0;">No goals yet. Add one — a vacation, an emergency fund — and set money aside toward it over time.</p>`
+        }
+      </div>`;
 
     const items = closed
       .map((p) => {
@@ -1505,8 +1531,9 @@
         <div class="ins-label">Total saved to date</div>
         <div class="ins-amount ${totalSaved < 0 ? "neg" : ""}">${fmt(totalSaved)}</div>
         <div class="ins-sub">across ${n} pay period${n === 1 ? "" : "s"} · avg ${fmt(avgSaved)} saved · ${fmt(avgSpent)} spent</div>
-        ${goalHtml}
       </div>
+
+      ${goalsCard}
 
       <div class="card">
         <h2>Saved per period</h2>
@@ -1541,10 +1568,11 @@
     main.querySelectorAll(".hist-item").forEach((el) =>
       el.addEventListener("click", () => openHistoryDetail(el.dataset.id))
     );
-    const sg = document.getElementById("set-goal-btn");
-    if (sg) sg.addEventListener("click", openGoalModal);
-    const ge = document.getElementById("goal-edit");
-    if (ge) ge.addEventListener("click", openGoalModal);
+    const ga = document.getElementById("goal-add");
+    if (ga) ga.addEventListener("click", () => openGoalEdit(null));
+    main.querySelectorAll("[data-goal]").forEach((el) =>
+      el.addEventListener("click", () => openGoalDetail(el.dataset.goal))
+    );
   }
 
   function fmtDateShort(iso) {
@@ -1556,53 +1584,121 @@
   }
 
   /* ---------- Savings goal ---------- */
-  function openGoalModal() {
-    const g = state.goal || { name: "", target: "" };
+  // Goal detail: add money toward it, or edit/delete it.
+  function openGoalDetail(id) {
+    const g = (state.goals || []).find((x) => x.id === id);
+    if (!g) return;
+    const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
+    const done = g.target > 0 && g.saved >= g.target - 0.005;
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Savings goal">
-          <h2>Savings goal</h2>
-          <p class="sub">Set a target — your progress is your total saved across all finished pay periods.</p>
-          <div class="field">
-            <label for="goal-name">What's it for?</label>
-            <input id="goal-name" placeholder="e.g. Trip to Japan" value="${esc(g.name || "")}" />
+          <h2>${esc(g.emoji || "🎯")} ${esc(g.name)}</h2>
+          <p class="sub">${fmt(g.saved)} of ${fmt(g.target)} · ${done ? "reached 🎉" : fmt(g.target - g.saved) + " to go"}</p>
+          <div class="bar" style="margin-bottom:16px;"><div class="bar-fill ok" style="width:${pct}%"></div></div>
+          <div class="field money-input">
+            <label for="gc-amt">Add money to this goal</label>
+            <input id="gc-amt" type="number" inputmode="decimal" placeholder="0.00" step="0.01" />
+          </div>
+          <button class="btn btn-primary btn-block" id="gc-add">Add contribution</button>
+          <div class="field-row" style="margin-top:12px;">
+            <button class="btn btn-ghost" id="gc-edit" style="flex:1;">Edit</button>
+            <button class="btn btn-danger" id="gc-del" style="flex:1;">Delete</button>
+          </div>
+          <button class="btn btn-ghost btn-block" id="gc-close" style="margin-top:8px;">Close</button>
+        </div>
+      </div>
+    `);
+    const amtEl = document.getElementById("gc-amt");
+    amtEl.addEventListener("input", () => clearFieldError(amtEl));
+    document.getElementById("gc-add").addEventListener("click", () => {
+      const v = Number(amtEl.value);
+      if (!v || v <= 0) {
+        showFieldError(amtEl, "Enter an amount greater than zero.");
+        return;
+      }
+      g.saved = Math.max(0, (Number(g.saved) || 0) + v);
+      save();
+      close();
+      render();
+      showToast(`Added ${fmt(v)} to ${g.name} 🎯`);
+    });
+    document.getElementById("gc-close").addEventListener("click", close);
+    document.getElementById("gc-edit").addEventListener("click", () => {
+      close();
+      openGoalEdit(id);
+    });
+    document.getElementById("gc-del").addEventListener("click", () => {
+      if (confirm(`Delete the "${g.name}" goal?`)) {
+        state.goals = (state.goals || []).filter((x) => x.id !== id);
+        save();
+        close();
+        render();
+      }
+    });
+  }
+
+  // Create a new goal (id null) or edit an existing one.
+  function openGoalEdit(id) {
+    const g = id ? (state.goals || []).find((x) => x.id === id) : null;
+    const editing = !!g;
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="${editing ? "Edit goal" : "New goal"}">
+          <h2>${editing ? "Edit goal" : "New savings goal"}</h2>
+          <p class="sub">Give it a name and a target, then add money toward it whenever you like.</p>
+          <div class="field-row">
+            <div class="field" style="flex:0 0 72px;">
+              <label for="g-emoji">Icon</label>
+              <input id="g-emoji" class="emoji-in" maxlength="2" value="${esc(g ? g.emoji || "🎯" : "🎯")}" style="width:100%;text-align:center;" />
+            </div>
+            <div class="field" style="flex:1;">
+              <label for="g-name">Name</label>
+              <input id="g-name" placeholder="e.g. Trip to Japan" value="${esc(g ? g.name : "")}" />
+            </div>
           </div>
           <div class="field money-input">
-            <label for="goal-target">Target amount</label>
-            <input id="goal-target" type="number" inputmode="decimal" placeholder="0.00" step="0.01" value="${g.target != null ? esc(g.target) : ""}" />
+            <label for="g-target">Target amount</label>
+            <input id="g-target" type="number" inputmode="decimal" placeholder="0.00" step="0.01" value="${g && g.target != null ? esc(g.target) : ""}" />
           </div>
+          ${
+            editing
+              ? `<div class="field money-input"><label for="g-saved">Saved so far</label>
+                   <input id="g-saved" type="number" inputmode="decimal" placeholder="0.00" step="0.01" value="${esc(g.saved || 0)}" /></div>`
+              : ""
+          }
           <div class="field-row">
-            ${state.goal
-              ? `<button class="btn btn-danger" id="goal-clear" style="flex:1;">Remove</button>`
-              : `<button class="btn btn-ghost" id="goal-cancel" style="flex:1;">Cancel</button>`}
-            <button class="btn btn-primary" id="goal-save" style="flex:2;">Save goal</button>
+            <button class="btn btn-ghost" id="g-cancel" style="flex:1;">Cancel</button>
+            <button class="btn btn-primary" id="g-save" style="flex:2;">${editing ? "Save" : "Create goal"}</button>
           </div>
         </div>
       </div>
     `);
-    const targetEl = document.getElementById("goal-target");
+    const targetEl = document.getElementById("g-target");
     targetEl.addEventListener("input", () => clearFieldError(targetEl));
-    document.getElementById("goal-save").addEventListener("click", () => {
+    document.getElementById("g-cancel").addEventListener("click", close);
+    document.getElementById("g-save").addEventListener("click", () => {
       const target = Number(targetEl.value);
       if (!target || target <= 0) {
         showFieldError(targetEl, "Enter a target greater than zero.");
         return;
       }
-      state.goal = { name: document.getElementById("goal-name").value.trim() || "Savings goal", target };
+      const emoji = document.getElementById("g-emoji").value.trim() || "🎯";
+      const name = document.getElementById("g-name").value.trim() || "Savings goal";
+      if (editing) {
+        g.emoji = emoji;
+        g.name = name;
+        g.target = target;
+        const sv = document.getElementById("g-saved");
+        if (sv) g.saved = Math.max(0, Number(sv.value) || 0);
+      } else {
+        if (!Array.isArray(state.goals)) state.goals = [];
+        state.goals.push({ id: uid(), emoji, name, target, saved: 0 });
+      }
       save();
       close();
       render();
     });
-    const cancel = document.getElementById("goal-cancel");
-    if (cancel) cancel.addEventListener("click", close);
-    const clear = document.getElementById("goal-clear");
-    if (clear)
-      clear.addEventListener("click", () => {
-        state.goal = null;
-        save();
-        close();
-        render();
-      });
   }
 
   function fmtDateLong(iso) {
@@ -2035,7 +2131,7 @@
       )
     )
       return;
-    state = Object.assign(defaultState(), parsed);
+    state = migrateState(Object.assign(defaultState(), parsed));
     state.view = "dashboard";
     save();
     render();
@@ -2200,7 +2296,7 @@
     const incoming = remote.data;
     const keepView = state.view;
     const keepReport = state._reportId;
-    state = Object.assign(defaultState(), incoming);
+    state = migrateState(Object.assign(defaultState(), incoming));
     state.view = keepView; // don't yank the other person's tab around
     if (keepReport) state._reportId = keepReport;
     state.updatedAt = remote.updatedAt;
