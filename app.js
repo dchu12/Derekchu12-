@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "70";
+  const APP_VERSION = "71";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1245,7 +1245,23 @@
       .filter((x) => x.amt > 0)
       .sort((a, b) => b.amt - a.amt);
     const topCats = catTotals.slice(0, 3);
-    const maxCat = topCats.length ? topCats[0].amt : 0;
+    // Donut breakdown: top 3 categories + "Other" for the rest.
+    const segTotal = topCats.reduce((s, x) => s + x.amt, 0);
+    const otherAmt = Math.max(0, total - segTotal);
+    const segs = topCats.map((x, i) => ({ label: `${x.c.emoji} ${x.c.name}`, amt: x.amt, color: `var(--seg${i + 1})` }));
+    if (otherAmt > 0.005) segs.push({ label: "Other", amt: otherAmt, color: "var(--seg-other)" });
+    let donutCum = 0;
+    const donutArcs = segs
+      .map((s) => {
+        const pct = total > 0 ? (s.amt / total) * 100 : 0;
+        const off = 25 - donutCum;
+        donutCum += pct;
+        return `<circle cx="21" cy="21" r="15.915" fill="none" stroke="${s.color}" stroke-width="5" stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"></circle>`;
+      })
+      .join("");
+    const donutLegend = segs
+      .map((s) => `<div class="dn-row"><span class="dn-dot" style="background:${s.color}"></span><span class="dn-name">${esc(s.label)}</span><span class="dn-amt">${fmt(s.amt)}</span></div>`)
+      .join("");
 
     // Optional filter by category (tap a chip). Transient, per-device.
     const usedCatIds = [...new Set(p.transactions.map((t) => t.categoryId))];
@@ -1308,14 +1324,10 @@
         <div class="ss-range">${esc(periodRangeLabel(p))}</div>
         ${topCats.length ? `<div class="ss-top">
           <div class="ss-top-label">Top categories</div>
-          ${topCats
-            .map(
-              ({ c, amt }) => `<div class="ss-cat">
-              <div class="ss-cat-row"><span class="ss-cat-name">${esc(c.emoji)} ${esc(c.name)}</span><span class="ss-cat-amt">${fmt(amt)}</span></div>
-              <div class="ss-cat-bar"><span style="width:${maxCat ? Math.max(6, Math.round((amt / maxCat) * 100)) : 0}%"></span></div>
-            </div>`
-            )
-            .join("")}
+          <div class="dn-wrap">
+            <div class="dn-chart"><svg viewBox="0 0 42 42" aria-hidden="true"><circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--surface-2)" stroke-width="5"></circle>${donutArcs}</svg></div>
+            <div class="dn-legend">${donutLegend}</div>
+          </div>
         </div>` : ""}
       </div>
       <div class="card">
