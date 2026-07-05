@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "24";
+  const APP_VERSION = "25";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -116,23 +116,29 @@
   const totalSavedToDate = () =>
     state.periods.filter((p) => p.closed).reduce((s, p) => s + periodSaved(p), 0);
 
+  // A savings/goal category (e.g. "Savings", "Emergency fund") is money set aside
+  // on purpose — funding it fully is a win, not overspending, so the coach never scolds it.
+  function isSavingsCat(c) {
+    return /sav(e|ing)|emergency|nest\s*egg|rainy\s*day|invest/i.test(c.name || "");
+  }
+
   // Set of category ids currently spent over their (non-zero) budget.
   function overBudgetIds(p) {
     return new Set(
       p.categories
-        .filter((c) => c.budgeted > 0 && catSpent(p, c.id) > c.budgeted + 0.005)
+        .filter((c) => c.budgeted > 0 && !isSavingsCat(c) && catSpent(p, c.id) > c.budgeted + 0.005)
         .map((c) => c.id)
     );
   }
 
-  // Categories in the 85%–100% "getting close" zone (not yet over).
+  // Discretionary categories in the 85%–under-100% "getting close" zone (still money left, not over).
   function closeIds(p) {
     return new Set(
       p.categories
         .filter((c) => {
-          if (c.fixed || !(c.budgeted > 0)) return false;
+          if (c.fixed || isSavingsCat(c) || !(c.budgeted > 0)) return false;
           const cs = catSpent(p, c.id);
-          return cs >= c.budgeted * 0.85 && cs <= c.budgeted + 0.005;
+          return cs >= c.budgeted * 0.85 && cs < c.budgeted - 0.005;
         })
         .map((c) => c.id)
     );
@@ -140,8 +146,9 @@
 
   /* A friendly coach line for the dashboard, based on how the period's going. */
   function coachMessage(p) {
-    // Only coach on discretionary spending — fixed bills are auto-filled to 100% by design.
-    const cats = p.categories.filter((c) => c.budgeted > 0 && !c.fixed);
+    // Coach only on discretionary spending — fixed bills auto-fill to 100%, and
+    // savings/goal categories are wins rather than overspending.
+    const cats = p.categories.filter((c) => c.budgeted > 0 && !c.fixed && !isSavingsCat(c));
     const over = cats.filter((c) => catSpent(p, c.id) > c.budgeted + 0.005);
     if (over.length) {
       const names = over.map((c) => c.name).join(", ");
@@ -151,7 +158,10 @@
       };
     }
     const close = cats
-      .filter((c) => catSpent(p, c.id) >= c.budgeted * 0.85)
+      .filter((c) => {
+        const cs = catSpent(p, c.id);
+        return cs >= c.budgeted * 0.85 && cs < c.budgeted - 0.005;
+      })
       .sort((a, b) => catSpent(p, b.id) / b.budgeted - catSpent(p, a.id) / a.budgeted);
     if (close.length) {
       const c = close[0];
@@ -176,6 +186,15 @@
       "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you love. — The Art of Spending Money",
       "🧭 “The whole point of money is to give you independence and freedom.” Every mindful choice buys a little more. — The Art of Spending Money",
     ];
+    // Celebrate any savings/goal category she's fully funded this period.
+    const funded = p.categories.filter(
+      (c) => c.budgeted > 0 && isSavingsCat(c) && catSpent(p, c.id) >= c.budgeted - 0.005
+    );
+    if (funded.length) {
+      lines.unshift(
+        `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
+      );
+    }
     const idx = (p.transactions.length + daysLeft(p)) % lines.length;
     return { tone: "ok", text: lines[idx] };
   }
