@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "69";
+  const APP_VERSION = "70";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1240,12 +1240,12 @@
 
     const catById = Object.fromEntries(p.categories.map((c) => [c.id, c]));
     const total = totalSpent(p);
-    const count = p.transactions.length;
-    const avgPerTxn = count ? total / count : 0;
-    const topCat = p.categories
+    const catTotals = p.categories
       .map((c) => ({ c, amt: catSpent(p, c.id) }))
       .filter((x) => x.amt > 0)
-      .sort((a, b) => b.amt - a.amt)[0];
+      .sort((a, b) => b.amt - a.amt);
+    const topCats = catTotals.slice(0, 3);
+    const maxCat = topCats.length ? topCats[0].amt : 0;
 
     // Optional filter by category (tap a chip). Transient, per-device.
     const usedCatIds = [...new Set(p.transactions.map((t) => t.categoryId))];
@@ -1306,11 +1306,17 @@
         <div class="ss-label">Spent this period</div>
         <div class="ss-total">${fmt(total)}</div>
         <div class="ss-range">${esc(periodRangeLabel(p))}</div>
-        <div class="ss-grid">
-          <div class="sstat"><div class="sv">${count}</div><div class="sk">${count === 1 ? "Transaction" : "Transactions"}</div></div>
-          <div class="sstat"><div class="sv">${fmt(avgPerTxn)}</div><div class="sk">Avg / txn</div></div>
-          <div class="sstat"><div class="sv sv-emoji">${topCat ? esc(topCat.c.emoji) : "—"}</div><div class="sk">${topCat ? esc(topCat.c.name) : "Top category"}</div></div>
-        </div>
+        ${topCats.length ? `<div class="ss-top">
+          <div class="ss-top-label">Top categories</div>
+          ${topCats
+            .map(
+              ({ c, amt }) => `<div class="ss-cat">
+              <div class="ss-cat-row"><span class="ss-cat-name">${esc(c.emoji)} ${esc(c.name)}</span><span class="ss-cat-amt">${fmt(amt)}</span></div>
+              <div class="ss-cat-bar"><span style="width:${maxCat ? Math.max(6, Math.round((amt / maxCat) * 100)) : 0}%"></span></div>
+            </div>`
+            )
+            .join("")}
+        </div>` : ""}
       </div>
       <div class="card">
         <p class="sub" style="margin-top:0;">${subline}</p>

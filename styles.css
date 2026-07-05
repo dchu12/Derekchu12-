@@ -131,7 +131,15 @@ body {
 .ss-label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
 .ss-total { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; color: var(--accent); margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
 .ss-range { font-size: 12.5px; color: var(--text-dim); margin-bottom: 16px; }
-.ss-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--border); padding-top: 14px; }
+.ss-top { border-top: 1px solid var(--border); padding-top: 14px; text-align: left; }
+.ss-top-label { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px; }
+.ss-cat { margin-bottom: 12px; }
+.ss-cat:last-child { margin-bottom: 0; }
+.ss-cat-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 5px; }
+.ss-cat-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.ss-cat-amt { font-size: 14px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.ss-cat-bar { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.ss-cat-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
 .sort-row { margin-bottom: 12px; }
 
 .days-pill {
