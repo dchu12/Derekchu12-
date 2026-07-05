@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "45";
+  const APP_VERSION = "46";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -59,7 +59,9 @@
   let resultsUnsub = [];  // realtime results listeners (both people)
   const resultsCache = { kelly: null, derek: null }; // latest results docs
   const resultsSeeded = { derek: false, kelly: false }; // publish each summary once after first sync
-  let bannerDismissed = false; // data-safety banner dismissed for this session
+  // Data-safety banner: stays dismissed for 30 days once closed (persisted), so it doesn't nag.
+  let bannerDismissed =
+    Date.now() - Number(localStorage.getItem(STORAGE_KEY + "-banner-dismissed") || 0) < 30 * 86400000;
 
   function loadWS(who) {
     try {
@@ -965,7 +967,12 @@
     const sbk = document.getElementById("safety-backup");
     if (sbk) sbk.addEventListener("click", exportData);
     const sdm = document.getElementById("safety-dismiss");
-    if (sdm) sdm.addEventListener("click", () => { bannerDismissed = true; render(); });
+    if (sdm)
+      sdm.addEventListener("click", () => {
+        bannerDismissed = true;
+        try { localStorage.setItem(STORAGE_KEY + "-banner-dismissed", String(Date.now())); } catch (e) {}
+        render();
+      });
     const pe = document.getElementById("period-ended");
     if (pe) pe.addEventListener("click", () => confirmNewPayday(p));
     const ft = document.getElementById("fixed-toggle");
