@@ -92,9 +92,9 @@ body {
   padding: 22px;
 }
 .hero .label { font-size: 12px; opacity: 0.82; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; }
-.hero-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
-.hero-greet { font-size: 15px; font-weight: 600; opacity: 0.92; letter-spacing: -0.01em; }
+.hero-hello { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.01em; margin: 4px 2px 12px; }
 .hero-days {
+  display: inline-block; margin-top: 14px;
   background: rgba(255,255,255,0.18); color: #fff; border: none; font-family: inherit;
   font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
   cursor: pointer; white-space: nowrap;

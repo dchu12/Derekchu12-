@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "56";
+  const APP_VERSION = "57";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -919,13 +919,11 @@
     main.innerHTML = `
       ${dl === 0 ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>` : ""}
       ${safetyBanner}
+      <div class="hero-hello">Hello ${esc(greetName)}</div>
       <div class="card hero">
-        <div class="hero-top">
-          <span class="hero-greet">Hello ${esc(greetName)}</span>
-          <button type="button" class="hero-days" id="edit-dates" aria-label="Edit pay period dates" title="Edit pay period dates">${dl === 0 ? "Payday today" : `${dl} ${dl === 1 ? "day" : "days"} left`}</button>
-        </div>
         <div class="hero-eyebrow">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
+        <button type="button" class="hero-days" id="edit-dates" aria-label="Edit pay period dates" title="Edit pay period dates">${dl === 0 ? "Payday today" : `${dl} ${dl === 1 ? "day" : "days"} left`}</button>
       </div>
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
