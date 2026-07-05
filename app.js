@@ -10,7 +10,11 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "26";
+  const APP_VERSION = "27";
+
+  /* Which shared budget this app instance owns in the cloud (Firebase).
+   * Kelly's app owns "kelly"; Derek's app owns "derek". */
+  const BUDGET_KEY = "kelly";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -25,6 +29,12 @@
 
   let state = load();
 
+  // Cloud sync (Firebase) — entirely optional. The app is fully usable signed out.
+  let cloudUser = null;   // current Firebase user, or null
+  let cloudUnsub = null;  // realtime budget listener unsubscribe
+  let pushTimer = null;   // debounce handle for cloud writes
+  let firstAuth = true;   // so we only show the first-visit sign-in prompt once
+
   function load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -37,12 +47,20 @@
     }
   }
 
-  function save() {
+  // Write to localStorage without touching the sync timestamp (used when
+  // adopting a remote change, so it doesn't bounce straight back to the cloud).
+  function persistLocal() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch (e) {
       console.error("Failed to save state", e);
     }
+  }
+
+  function save() {
+    state.updatedAt = Date.now();
+    persistLocal();
+    schedulePush();
   }
 
   /* ------------------------------------------------------------------ *
@@ -1564,6 +1582,14 @@
   function openSettings() {
     const periods = state.periods.length;
     const txns = state.periods.reduce((s, p) => s + p.transactions.length, 0);
+    const cloudBlock = !cloudOn()
+      ? ""
+      : cloudUser
+      ? `<div class="settings-stat">☁️ Synced as ${esc(currentEmail())}</div>
+         <button class="btn btn-ghost btn-block btn-sm" id="set-signout">Sign out</button>
+         <div class="divider"></div>`
+      : `<button class="btn btn-primary btn-block" id="set-signin">☁️ Sign in to sync</button>
+         <p class="footer-note" style="margin:8px 0 16px;">Sync this budget across devices and share monthly results.</p>`;
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
@@ -1571,6 +1597,7 @@
           <p class="sub">Your budget lives only on this device. Back it up so you never lose it if you clear your browser or switch phones.</p>
 
           <div class="settings-stat">${periods} pay period${periods === 1 ? "" : "s"} · ${txns} transaction${txns === 1 ? "" : "s"} stored</div>
+          ${cloudBlock}
 
           <button class="btn btn-primary btn-block" id="set-export">⬇️ Download backup</button>
           <p class="footer-note" style="margin:8px 0 16px;">Saves a <code>.json</code> file you can keep safe or move to another device.</p>
@@ -1586,6 +1613,20 @@
         </div>
       </div>
     `);
+
+    const signInBtn = document.getElementById("set-signin");
+    if (signInBtn)
+      signInBtn.addEventListener("click", () => {
+        close();
+        openLogin(false);
+      });
+    const signOutBtn = document.getElementById("set-signout");
+    if (signOutBtn)
+      signOutBtn.addEventListener("click", () => {
+        Cloud.signOut();
+        close();
+        showToast("Signed out — syncing off");
+      });
 
     document.getElementById("set-export").addEventListener("click", exportData);
 
@@ -1619,6 +1660,157 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Cloud sync (Firebase) — optional; app works fully without it.
+   * ------------------------------------------------------------------ */
+  const cloudOn = () => !!(window.Cloud && Cloud.available);
+  const currentEmail = () => (cloudUser && cloudUser.email ? cloudUser.email : null);
+
+  function initCloud() {
+    if (!cloudOn()) return; // SDK didn't load (e.g. offline) → stay local
+    Cloud.init();
+    Cloud.onAuth((user) => {
+      cloudUser = user || null;
+      if (user) startSync();
+      else stopSync();
+      if (firstAuth) {
+        firstAuth = false;
+        // Prompt new visitors to sign in once; returning users are auto-signed-in.
+        if (!user && !localStorage.getItem("pb-login-prompted")) {
+          localStorage.setItem("pb-login-prompted", "1");
+          openLogin(true);
+        }
+      }
+    });
+  }
+
+  function startSync() {
+    if (cloudUnsub) return;
+    cloudUnsub = Cloud.watchBudget(BUDGET_KEY, onRemoteBudget);
+  }
+
+  function stopSync() {
+    if (cloudUnsub) {
+      cloudUnsub();
+      cloudUnsub = null;
+    }
+  }
+
+  // A remote budget doc arrived (initial load or the other person edited).
+  function onRemoteBudget(remote) {
+    const localAt = state.updatedAt || 0;
+    if (!remote) {
+      pushCloud(); // cloud is empty — seed it from this device
+      return;
+    }
+    const remoteAt = remote.updatedAt || 0;
+    if (remoteAt > localAt && remote.data) {
+      adoptRemote(remote);
+    } else if (localAt > remoteAt) {
+      pushCloud(); // our local copy is newer — push it up
+    }
+  }
+
+  function adoptRemote(remote) {
+    const incoming = remote.data;
+    const keepView = state.view;
+    const keepReport = state._reportId;
+    state = Object.assign(defaultState(), incoming);
+    state.view = keepView; // don't yank the other person's tab around
+    if (keepReport) state._reportId = keepReport;
+    state.updatedAt = remote.updatedAt;
+    persistLocal();
+    render();
+    if (remote.updatedBy && remote.updatedBy !== currentEmail()) {
+      showToast("☁️ Budget updated from the cloud");
+    }
+  }
+
+  function pushCloud() {
+    if (!cloudUser) return;
+    if (!state.updatedAt) state.updatedAt = Date.now();
+    const data = JSON.parse(JSON.stringify(state));
+    delete data.view; // per-device UI, not shared
+    delete data._reportId;
+    Cloud.saveBudget(BUDGET_KEY, {
+      data: data,
+      updatedAt: state.updatedAt,
+      updatedBy: currentEmail() || "",
+    });
+  }
+
+  function schedulePush() {
+    if (!cloudUser) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushCloud, 700);
+  }
+
+  function friendlyAuthError(e) {
+    const code = (e && e.code) || "";
+    if (code === "auth/invalid-email") return "That doesn't look like a valid email.";
+    if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential")
+      return "Email or password isn't right.";
+    if (code === "auth/too-many-requests") return "Too many tries — wait a minute and retry.";
+    if (code === "auth/network-request-failed") return "Network problem — check your connection.";
+    return "Couldn't sign in. Please try again.";
+  }
+
+  function openLogin(firstTime) {
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Sign in to sync">
+          <h2>${firstTime ? "Sync across devices" : "Sign in"}</h2>
+          <p class="sub">Sign in to sync this budget between phones and share monthly results. It keeps working offline either way.</p>
+          <div class="field">
+            <label for="lg-email">Email</label>
+            <input id="lg-email" type="email" autocomplete="username" placeholder="you@example.com" />
+          </div>
+          <div class="field">
+            <label for="lg-pass">Password</label>
+            <input id="lg-pass" type="password" autocomplete="current-password" placeholder="Your password" />
+          </div>
+          <div id="lg-err" class="field-error" style="display:none;"></div>
+          <button class="btn btn-primary btn-block" id="lg-go">Sign in</button>
+          <button class="btn btn-ghost btn-block" id="lg-skip" style="margin-top:8px;">Not now — use only on this device</button>
+        </div>
+      </div>
+    `);
+    const err = document.getElementById("lg-err");
+    const go = document.getElementById("lg-go");
+    const emailEl = document.getElementById("lg-email");
+    const passEl = document.getElementById("lg-pass");
+
+    document.getElementById("lg-skip").addEventListener("click", close);
+
+    const submit = () => {
+      const email = emailEl.value.trim();
+      const pass = passEl.value;
+      if (!email || !pass) {
+        err.style.display = "block";
+        err.textContent = "Enter your email and password.";
+        return;
+      }
+      go.disabled = true;
+      go.textContent = "Signing in…";
+      err.style.display = "none";
+      Cloud.signIn(email, pass)
+        .then(() => {
+          close();
+          showToast("☁️ Signed in — syncing on");
+        })
+        .catch((e) => {
+          go.disabled = false;
+          go.textContent = "Sign in";
+          err.style.display = "block";
+          err.textContent = friendlyAuthError(e);
+        });
+    };
+    go.addEventListener("click", submit);
+    passEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") submit();
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
    * Tab navigation
    * ------------------------------------------------------------------ */
   document.getElementById("tabs").addEventListener("click", (e) => {
@@ -1633,4 +1825,5 @@
 
   /* Boot */
   render();
+  initCloud();
 })();
