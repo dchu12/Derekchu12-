@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "82";
+  const APP_VERSION = "83";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -673,6 +673,8 @@
     // Header "Log spend" is available whenever there's an active period, on any tab.
     const headerLog = document.getElementById("header-log");
     if (headerLog) headerLog.hidden = !period;
+    const headerAdd = document.getElementById("header-add");
+    if (headerAdd) headerAdd.hidden = !period;
 
     // Reports (history + export) and Results stay reachable even between paychecks (no active period).
     if (state.view === "report") return renderHistory();
@@ -1099,6 +1101,30 @@
       close();
       render();
       showToast("Pay period updated ✓");
+    });
+  }
+
+  /* ---------- Quick add sheet (header "+"): income or new pay period ---------- */
+  function openQuickAdd(p) {
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal quick-add" role="dialog" aria-modal="true" aria-label="Quick add">
+          <h2>Quick add</h2>
+          <p class="sub">Add money to this period, or close it out and start fresh.</p>
+          <button class="btn btn-block btn-payday" id="qa-income">Add extra income</button>
+          <button class="btn btn-block btn-payday" id="qa-payday" style="margin-top:10px;">Got paid? Start a new pay period</button>
+          <button class="btn btn-ghost btn-block" id="qa-cancel" style="margin-top:10px;">Cancel</button>
+        </div>
+      </div>
+    `);
+    document.getElementById("qa-cancel").addEventListener("click", close);
+    document.getElementById("qa-income").addEventListener("click", () => {
+      close();
+      openIncomeModal(p);
+    });
+    document.getElementById("qa-payday").addEventListener("click", () => {
+      close();
+      confirmNewPayday(p);
     });
   }
 
@@ -2643,6 +2669,13 @@
     headerLogBtn.addEventListener("click", () => {
       const p = activePeriod();
       if (p) openSpendModal(p);
+    });
+
+  const headerAddBtn = document.getElementById("header-add");
+  if (headerAddBtn)
+    headerAddBtn.addEventListener("click", () => {
+      const p = activePeriod();
+      if (p) openQuickAdd(p);
     });
 
   /* Boot */

@@ -468,6 +468,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .brand { position: relative; }
 .brand-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .brand-actions .icon-btn { margin-left: 0; width: 34px; height: 34px; font-size: 16px; }
+.brand-actions .icon-btn.icon-add { color: var(--accent); font-size: 24px; font-weight: 700; line-height: 1; }
 .brand-actions .btn { height: 34px; padding-top: 0; padding-bottom: 0; }
 #manage-cats { width: 34px; height: 34px; }
 .icon-btn {
