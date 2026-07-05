@@ -1,6 +1,6 @@
 {
-  "name": "Derek's Payday Budget",
-  "short_name": "Derek Budget",
+  "name": "Yosan",
+  "short_name": "Yosan",
   "description": "Set your budget once each time you get paid, then track spending until the next paycheck.",
   "start_url": "./index.html",
   "display": "standalone",

@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1c39bb" />
-  <title>Kelly's Payday Budget</title>
+  <title>Yosan</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=50" />
+  <link rel="stylesheet" href="styles.css?v=51" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 </head>
@@ -17,8 +17,8 @@
     <!-- Header -->
     <header class="app-header">
       <div class="brand">
-        <span class="logo" aria-hidden="true">K</span>
-        <h1>Kelly's Payday Budget</h1>
+        <span class="logo" aria-hidden="true"><svg viewBox="0 0 48 48" width="23" height="23" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 14 L24 27 L35 14"/><path d="M24 27 V38"/><path d="M17 30 H31"/><path d="M17 34 H31"/></svg></span>
+        <h1 class="wordmark">Yosan<span class="wordmark-jp">予算</span></h1>
         <button class="icon-btn" id="settings-btn" aria-label="Settings and backup" title="Settings &amp; backup">⚙️</button>
       </div>
       <nav class="tabs" id="tabs">
@@ -42,8 +42,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="cloud.js?v=50"></script>
-  <script src="app.js?v=50"></script>
+  <script src="cloud.js?v=51"></script>
+  <script src="app.js?v=51"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

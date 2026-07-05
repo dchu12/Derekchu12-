@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "50";
+  const APP_VERSION = "51";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1439,7 +1439,7 @@
         })
         .join("\n") +
       `\n\nPay period starting ${fmtDateLong(p.startDate)}.` +
-      `\n\n— sent from Payday Budget`;
+      `\n\n— sent from Yosan`;
 
     const { close } = mountModal(`
       <div class="modal-overlay">
@@ -1923,7 +1923,7 @@
     const status = remaining < -0.005 ? "🔴 over budget" : "✅ within budget";
 
     const lines = [
-      "🐶 Kelly's Payday Budget — Summary",
+      `Yosan — ${PERSON_NAME}'s Summary`,
       `Pay period starting ${fmtDateLong(p.startDate)}`,
       `${freqLabel(p.frequency)}${active ? ` · ${dl} ${dl === 1 ? "day" : "days"} left` : " · closed"}`,
       "",
@@ -2203,7 +2203,7 @@
       return;
     }
     if (!isValidBackup(parsed)) {
-      showToast("That file doesn't look like a Payday Budget backup.");
+      showToast("That file doesn't look like a Yosan backup.");
       return;
     }
     const periods = parsed.periods.length;
