@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "37";
+  const APP_VERSION = "38";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -39,6 +39,7 @@
   let resultsUnsub = [];  // realtime results listeners (both people)
   const resultsCache = { kelly: null, derek: null }; // latest results docs
   let resultsSeeded = false; // publish our results summary once after first sync
+  let bannerDismissed = false; // data-safety banner dismissed for this session
 
   function load() {
     try {
@@ -777,8 +778,22 @@
       cats = p.categories.map(renderCat).join("");
     }
 
+    // Data-safety nudge: this budget only lives on-device until it's synced.
+    const needsSafety = state.periods.length > 0 && !cloudUser && !bannerDismissed;
+    const safetyBanner = needsSafety
+      ? `<div class="safety-banner">
+           <div class="safety-text">🔒 This budget is only saved on this device. ${cloudOn() ? "Sign in to sync it so you never lose it if your browser clears data." : "Download a backup so you never lose it if your browser clears data."}</div>
+           <div class="safety-actions">
+             ${cloudOn() ? `<button class="btn btn-primary btn-sm" id="safety-signin">Sign in to sync</button>` : ""}
+             <button class="btn btn-ghost btn-sm" id="safety-backup">Download backup</button>
+             <button type="button" class="safety-x" id="safety-dismiss" aria-label="Dismiss">✕</button>
+           </div>
+         </div>`
+      : "";
+
     main.innerHTML = `
       ${dl === 0 ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>` : ""}
+      ${safetyBanner}
       <div class="card hero">
         <div class="label">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
@@ -816,6 +831,12 @@
     document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
     const ed = document.getElementById("edit-dates");
     if (ed) ed.addEventListener("click", () => openPeriodDates(p));
+    const ssi = document.getElementById("safety-signin");
+    if (ssi) ssi.addEventListener("click", () => openLogin(false));
+    const sbk = document.getElementById("safety-backup");
+    if (sbk) sbk.addEventListener("click", exportData);
+    const sdm = document.getElementById("safety-dismiss");
+    if (sdm) sdm.addEventListener("click", () => { bannerDismissed = true; render(); });
     const pe = document.getElementById("period-ended");
     if (pe) pe.addEventListener("click", () => confirmNewPayday(p));
     const ft = document.getElementById("fixed-toggle");
@@ -1907,6 +1928,19 @@
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      localStorage.setItem(STORAGE_KEY + "-lastbackup", String(Date.now()));
+    } catch (e) {}
+  }
+
+  // Human-friendly "last backup" line for Settings.
+  function lastBackupLabel() {
+    const ts = Number(localStorage.getItem(STORAGE_KEY + "-lastbackup") || 0);
+    if (!ts) return "No backup downloaded yet";
+    const days = Math.floor((Date.now() - ts) / 86400000);
+    if (days <= 0) return "Last backup: today";
+    if (days === 1) return "Last backup: yesterday";
+    return `Last backup: ${days} days ago`;
   }
 
   function isValidBackup(obj) {
@@ -1960,7 +1994,7 @@
           ${cloudBlock}
 
           <button class="btn btn-primary btn-block" id="set-export">⬇️ Download backup</button>
-          <p class="footer-note" style="margin:8px 0 16px;">Saves a <code>.json</code> file you can keep safe or move to another device.</p>
+          <p class="footer-note" style="margin:8px 0 16px;">${esc(lastBackupLabel())} · saves a <code>.json</code> file you can keep safe or move to another device.</p>
 
           <label class="btn btn-ghost btn-block" for="set-import-file" style="cursor:pointer;">⬆️ Restore from backup</label>
           <input type="file" id="set-import-file" accept="application/json,.json" style="position:absolute;width:1px;height:1px;opacity:0;" />

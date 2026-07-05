@@ -483,6 +483,12 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 
 /* Editable transactions inside a History period detail */
 .hist-txns { max-height: 44vh; overflow-y: auto; margin: 2px 0; }
+
+/* Data-safety banner */
+.safety-banner { background: #fdf1dd; border: 1px solid #f3ddb2; color: #835b16; border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; }
+.safety-text { font-size: 13px; font-weight: 500; line-height: 1.4; margin-bottom: 10px; }
+.safety-actions { display: flex; gap: 8px; align-items: center; }
+.safety-x { margin-left: auto; background: none; border: none; color: #835b16; font-size: 15px; cursor: pointer; padding: 4px 6px; line-height: 1; }
 .input-invalid { border-color: var(--danger) !important; outline-color: var(--danger) !important; }
 
 /* Over-budget alert */
