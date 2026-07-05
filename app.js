@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "44";
+  const APP_VERSION = "45";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -924,7 +924,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Categories</h2>
           <div style="display:flex;gap:8px;">
-            <button class="btn btn-ghost btn-sm" id="manage-cats">✏️ Manage</button>
+            <button class="btn btn-ghost btn-sm" id="manage-cats">Manage</button>
             <button class="btn btn-primary btn-sm" id="quick-add">+ Log spend</button>
           </div>
         </div>
@@ -940,7 +940,7 @@
       </div>
 
       <button class="btn btn-ghost btn-block" id="add-income">➕ Add extra income</button>
-      <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">💵 Got paid? Start a new pay period</button>
+      <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">Got paid? Start a new pay period</button>
     `;
 
     document.getElementById("quick-add").addEventListener("click", () => openSpendModal(p));
