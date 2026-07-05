@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "60";
+  const APP_VERSION = "61";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -953,7 +953,7 @@
         </div>
       </div>
 
-      <button class="btn btn-ghost btn-block" id="add-income">Add extra income</button>
+      <button class="btn btn-block btn-payday" id="add-income">Add extra income</button>
       <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">Got paid? Start a new pay period</button>
     `;
 
