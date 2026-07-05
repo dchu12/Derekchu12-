@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "59";
+  const APP_VERSION = "60";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -859,7 +859,7 @@
     const budgeted = totalBudgeted(p);
     const spent = totalSpent(p);
     const remaining = budgeted - spent;
-    const saved = periodIncome(p) - budgeted;
+    const saved = periodIncome(p) - spent; // money kept so far (income minus spent) — matches History/Results
     const dl = daysLeft(p);
     const coach = coachMessage(p);
 
@@ -1942,7 +1942,7 @@
       pad("Budgeted", fmt(budgeted)),
       pad("Spent", fmt(spent)),
       pad(active ? "Remaining" : "Left over", `${fmt(active ? remaining : saved)}  ${status}`),
-      pad(unbudgeted >= 0 ? "Saved" : "Over budget", fmt(Math.abs(unbudgeted))),
+      pad(unbudgeted >= 0 ? "Unbudgeted" : "Over budget", fmt(Math.abs(unbudgeted))),
       "",
       "By category (most spent first):",
       catLines || "  (no spending yet)",
