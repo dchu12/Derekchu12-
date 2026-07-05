@@ -478,6 +478,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .rs-of { color: var(--text-dim); font-weight: 400; font-size: 12px; }
 .rs-combined { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 10px; padding: 11px 12px; font-size: 13.5px; font-weight: 600; }
 .rs-combined b { font-size: 15px; }
+.rs-month-tag { font-size: 12px; font-weight: 600; color: var(--text-dim); }
 .input-invalid { border-color: var(--danger) !important; outline-color: var(--danger) !important; }
 
 /* Over-budget alert */

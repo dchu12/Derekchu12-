@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "30";
+  const APP_VERSION = "31";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1678,18 +1678,21 @@
       return;
     }
 
-    // Default to *your own* latest month so you always see your data first.
-    const ownMonths = (resultsCache[BUDGET_KEY] && resultsCache[BUDGET_KEY].months) || [];
-    const defMonth = ownMonths.length ? ownMonths[0].month : months[0];
-    const sel = state._resultsMonth && monthSet[state._resultsMonth] ? state._resultsMonth : defMonth;
-    const monthOf = (doc) => (doc && doc.months ? doc.months.find((m) => m.month === sel) : null);
-    const km = monthOf(k);
-    const dm = monthOf(d);
+    const sel = state._resultsMonth && monthSet[state._resultsMonth] ? state._resultsMonth : months[0];
+    // Show the selected month for each person, or fall back to their own latest month —
+    // pay cycles don't always line up to the same calendar month.
+    const pick = (doc) => {
+      if (!doc || !doc.months || !doc.months.length) return null;
+      return doc.months.find((m) => m.month === sel) || doc.months[0];
+    };
+    const km = pick(k);
+    const dm = pick(d);
     const combinedSaved = (km ? km.saved : 0) + (dm ? dm.saved : 0);
 
     const personCard = (title, m) => {
       if (!m)
-        return `<div class="card"><h3>${esc(title)}</h3><p class="sub">No budget recorded for this month yet.</p></div>`;
+        return `<div class="card"><h3>${esc(title)}</h3><p class="sub">No budget recorded yet — nothing has synced from them.</p></div>`;
+      const monthTag = `<span class="rs-month-tag">${monthLabel(m.month)}</span>`;
       const cats = m.categories
         .slice()
         .sort((a, b) => b.spent - a.spent)
@@ -1703,7 +1706,7 @@
         .join("");
       return `
         <div class="card">
-          <h3 style="margin-bottom:6px;">${esc(title)}</h3>
+          <h3 style="margin-bottom:6px;">${esc(title)} ${monthTag}</h3>
           <div class="rs-grid">
             <div><span class="rs-k">Income</span><b>${fmt(m.income)}</b></div>
             <div><span class="rs-k">Spent</span><b>${fmt(m.spent)}</b></div>
@@ -1716,13 +1719,13 @@
     main.innerHTML = `
       <div class="card">
         <h2>Shared results</h2>
-        <p class="sub">You and ${esc(PARTNER_NAME)}'s totals for the month.</p>
+        <p class="sub">You and ${esc(PARTNER_NAME)}'s latest results. Each card is labelled with the month it's showing.</p>
         <div class="field" style="margin-bottom:10px;">
           <select id="rs-month">
             ${months.map((mk) => `<option value="${mk}" ${mk === sel ? "selected" : ""}>${monthLabel(mk)}</option>`).join("")}
           </select>
         </div>
-        <div class="rs-combined">Combined saved this month <b class="${combinedSaved >= 0 ? "rs-pos" : "rs-neg"}">${fmt(combinedSaved)}</b></div>
+        <div class="rs-combined">Combined saved <b class="${combinedSaved >= 0 ? "rs-pos" : "rs-neg"}">${fmt(combinedSaved)}</b></div>
       </div>
       ${personCard((k && k.name) || "Kelly", km)}
       ${personCard((d && d.name) || "Derek", dm)}
