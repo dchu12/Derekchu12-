@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "33";
+  const APP_VERSION = "34";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -209,6 +209,18 @@
     );
   }
 
+  /* Pick a fresh on-track line each time (each open/action), avoiding an
+   * immediate repeat so it always feels new. */
+  let _lastCoachIdx = -1;
+  function rotateLine(lines) {
+    if (!lines.length) return "";
+    if (lines.length === 1) return lines[0];
+    let idx = Math.floor(Math.random() * lines.length);
+    if (idx === _lastCoachIdx) idx = (idx + 1) % lines.length;
+    _lastCoachIdx = idx;
+    return lines[idx];
+  }
+
   /* A friendly coach line for the dashboard, based on how the period's going. */
   function coachMessage(p) {
     // Coach only on discretionary spending — fixed bills auto-fill to 100%, and
@@ -260,8 +272,7 @@
         `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
       );
     }
-    const idx = (p.transactions.length + daysLeft(p)) % lines.length;
-    return { tone: "ok", text: lines[idx] };
+    return { tone: "ok", text: rotateLine(lines) };
   }
 
   const freqLabel = (f) =>
