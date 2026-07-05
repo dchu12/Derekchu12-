@@ -1,7 +1,7 @@
 /* Payday Budget service worker — offline support + fresh updates.
  * Network-first: online always gets the latest; offline falls back to cache. */
-const CACHE = "payday-kelly-v31";
-const CORE = ["./", "./index.html", "./styles.css", "./app.js", "./cloud.js", "./manifest.json"];
+const CACHE = "payday-kelly-v32";
+const CORE = ["./", "./index.html", "./styles.css", "./app.js", "./cloud.js", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
