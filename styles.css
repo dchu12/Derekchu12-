@@ -92,7 +92,14 @@ body {
   color: #fff;
   border: none;
   padding: 22px;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
 }
+.hero-main { min-width: 0; }
+.hero-ring { position: relative; flex: 0 0 auto; width: 84px; height: 84px; }
+.hero-ring svg { display: block; }
+.hero-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
+.hrl-pct { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+.hrl-cap { font-size: 9.5px; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 3px; }
 .hero-days {
   display: inline-block; margin-top: 14px;
   background: rgba(255,255,255,0.18); color: #fff; border: none; font-family: inherit;
