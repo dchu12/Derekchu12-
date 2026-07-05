@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "38";
+  const APP_VERSION = "39";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -337,6 +337,10 @@
           <input type="checkbox" data-f="fixed" ${r.fixed ? "checked" : ""} />
           📌 Fixed bill — auto-logged each payday
         </label>
+        <label class="fixed-toggle">
+          <input type="checkbox" data-f="rollover" ${r.rollover ? "checked" : ""} />
+          🔄 Roll leftover into next period
+        </label>
         ${note}
       </div>`;
   }
@@ -604,20 +608,44 @@
       }
     `;
 
-    // Working copy of allocation rows
-    let rows = template.categories.map((c) => ({
-      id: uid(),
-      emoji: c.emoji || "💵",
-      name: c.name || "",
-      budgeted: c.budgeted != null ? String(c.budgeted) : "",
-      fixed: !!c.fixed,
-    }));
+    // Most recent (now-closed) period, used to roll leftovers into this one.
+    const prevPeriod = state.periods.length ? state.periods[state.periods.length - 1] : null;
+
+    // Working copy of allocation rows — with rollover added for opted-in categories.
+    let rows = template.categories.map((c) => {
+      const base = c.budgeted != null ? Number(c.budgeted) || 0 : 0;
+      let rolled = 0;
+      if (c.rollover && prevPeriod && prevPeriod.closed) {
+        const pc = prevPeriod.categories.find((x) => x.name === c.name);
+        if (pc) {
+          const leftover = Number(pc.budgeted || 0) - catSpent(prevPeriod, pc.id);
+          if (leftover > 0.005) rolled = leftover;
+        }
+      }
+      const total = base + rolled;
+      return {
+        id: uid(),
+        emoji: c.emoji || "💵",
+        name: c.name || "",
+        budgeted: total > 0 ? String(+total.toFixed(2)) : c.budgeted != null ? String(c.budgeted) : "",
+        fixed: !!c.fixed,
+        rollover: !!c.rollover,
+        _rolled: rolled,
+      };
+    });
 
     const listEl = document.getElementById("alloc-list");
     const paycheckEl = document.getElementById("paycheck");
 
     function drawRows() {
-      listEl.innerHTML = rows.map((r) => catEditRow(r, r.id, { drag: true })).join("");
+      listEl.innerHTML = rows
+        .map((r) =>
+          catEditRow(r, r.id, {
+            drag: true,
+            note: r._rolled > 0 ? `🔄 +${fmt(r._rolled)} rolled over from last period` : "",
+          })
+        )
+        .join("");
       updateSummary();
     }
 
@@ -675,6 +703,7 @@
           name: r.name.trim(),
           budgeted: Number(r.budgeted),
           fixed: !!r.fixed,
+          rollover: !!r.rollover,
         }));
       if (cats.length === 0) {
         showToast("Add at least one category with an amount.");
@@ -709,7 +738,7 @@
       // Remember layout (names/emojis/amounts/fixed) for next payday.
       state.template = {
         frequency: period.frequency,
-        categories: cats.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed })),
+        categories: cats.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed, rollover: !!c.rollover })),
       };
       state.view = "dashboard";
       save();
@@ -967,6 +996,7 @@
       name: c.name,
       budgeted: String(c.budgeted),
       fixed: !!c.fixed,
+      rollover: !!c.rollover,
       _key: uid(),
     }));
 
@@ -1044,7 +1074,7 @@
     });
 
     document.getElementById("mc-add").addEventListener("click", () => {
-      rows.push({ id: null, emoji: "💵", name: "", budgeted: "", fixed: false, _key: uid() });
+      rows.push({ id: null, emoji: "💵", name: "", budgeted: "", fixed: false, rollover: false, _key: uid() });
       drawRows();
       const last = listEl.querySelector(".cat-edit-row:last-child .name-in");
       if (last) last.focus();
@@ -1061,6 +1091,7 @@
           name: r.name.trim(),
           budgeted: Math.max(0, Number(r.budgeted) || 0),
           fixed: !!r.fixed,
+          rollover: !!r.rollover,
         }));
 
       if (kept.length === 0) {
@@ -1076,7 +1107,7 @@
       // Remember the new layout for the next payday.
       state.template = {
         frequency: p.frequency,
-        categories: kept.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed })),
+        categories: kept.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed, rollover: !!c.rollover })),
       };
 
       save();
