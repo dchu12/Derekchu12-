@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "74";
+  const APP_VERSION = "75";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1715,8 +1715,6 @@
       .join("");
 
     main.innerHTML =
-      exportCard +
-      goalsCard +
       (hasHistory
         ? `
       <div class="card">
@@ -1749,7 +1747,9 @@
         <p class="sub">Tap one to see the details.</p>
         ${items}
       </div>`
-        : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`);
+        : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`) +
+      exportCard +
+      goalsCard;
 
     document.getElementById("rp-period").addEventListener("change", (e) => { state._reportId = e.target.value; render(); });
     const rpShare = document.getElementById("rp-share");
