@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "42";
+  const APP_VERSION = "43";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1240,7 +1240,7 @@
               <div class="txn-emoji">${esc(c.emoji)}</div>
               <div>
                 <div class="txn-desc">${esc(t.description || c.name)}</div>
-                <div class="txn-meta">${esc(c.name)} · ${esc(t.date)}</div>
+                <div class="txn-meta">${esc(c.name)} · ${esc(fmtDateShort(t.date))}</div>
               </div>
             </button>
             <div style="display:flex;align-items:center;">
@@ -1815,7 +1815,7 @@
               <div class="txn-emoji">${esc(c.emoji)}</div>
               <div>
                 <div class="txn-desc">${esc(t.description || c.name)}</div>
-                <div class="txn-meta">${esc(c.name)} · ${esc(t.date)}</div>
+                <div class="txn-meta">${esc(c.name)} · ${esc(fmtDateShort(t.date))}</div>
               </div>
             </button>
             <div style="display:flex;align-items:center;">
