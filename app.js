@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "84";
+  const APP_VERSION = "85";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -941,7 +941,7 @@
         `<button type="button" class="fixed-summary ${fixedCollapsed ? "collapsed" : ""}" id="fixed-toggle" aria-expanded="${!fixedCollapsed}">
            <span class="ft-left">
              <span class="ft-icon" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2.5"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg></span>
-             <span class="ft-title">Fixed bills</span>
+             <span class="ft-title">Fixed Bills</span>
              <span class="ft-count">${fixedCats.length}</span>
            </span>
            <span class="ft-right">
@@ -1348,13 +1348,36 @@
     // Optional filter by category (tap a chip). Transient, per-device.
     const usedCatIds = [...new Set(p.transactions.map((t) => t.categoryId))];
     let activeFilter = state._spendFilter || "all";
-    if (activeFilter !== "all" && !usedCatIds.includes(activeFilter)) activeFilter = "all";
-    const filtered = activeFilter === "all" ? txns : txns.filter((t) => t.categoryId === activeFilter);
+    const usedCats = p.categories.filter((c) => usedCatIds.includes(c.id));
+    const hasDisc = usedCats.some((c) => !c.fixed);
+    const hasFixed = usedCats.some((c) => c.fixed);
+    const isTypeFilter = (f) => f === "all" || f === "discretionary" || f === "fixed";
+    // Drop stale filters: a removed category, or a type with nothing behind it.
+    if (!isTypeFilter(activeFilter) && !usedCatIds.includes(activeFilter)) activeFilter = "all";
+    if (activeFilter === "discretionary" && !hasDisc) activeFilter = "all";
+    if (activeFilter === "fixed" && !hasFixed) activeFilter = "all";
+
+    const matchesFilter = (t) => {
+      if (activeFilter === "all") return true;
+      const c = catById[t.categoryId];
+      if (activeFilter === "discretionary") return c && !c.fixed;
+      if (activeFilter === "fixed") return c && !!c.fixed;
+      return t.categoryId === activeFilter;
+    };
+    const filtered = txns.filter(matchesFilter);
     const filteredTotal = filtered.reduce((s, t) => s + Number(t.amount), 0);
 
+    // Offer the discretionary / fixed split only when both kinds of spending exist.
+    const typeChips =
+      hasDisc && hasFixed
+        ? `<button type="button" class="chip ${activeFilter === "discretionary" ? "active" : ""}" data-f="discretionary">Discretionary</button>
+           <button type="button" class="chip ${activeFilter === "fixed" ? "active" : ""}" data-f="fixed">Fixed Bills</button>`
+        : "";
+
     const filterRow = txns.length
-      ? `<div class="chips spend-filter" id="spend-filter" role="group" aria-label="Filter by category">
+      ? `<div class="chips spend-filter" id="spend-filter" role="group" aria-label="Filter transactions">
            <button type="button" class="chip ${activeFilter === "all" ? "active" : ""}" data-f="all">All</button>
+           ${typeChips}
            ${p.categories
              .filter((c) => usedCatIds.includes(c.id))
              .map(
@@ -1392,12 +1415,16 @@
           </div>`;
           })
           .join("")
-      : `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" ? "No spending logged yet this period. Tap “Log spend” up top to add one." : "No spending in this category yet."}</p></div>`;
+      : `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" ? "No spending logged yet this period. Tap “Log spend” up top to add one." : "Nothing matches this filter yet."}</p></div>`;
 
+    const filterName =
+      activeFilter === "discretionary" ? "discretionary spending"
+      : activeFilter === "fixed" ? "fixed bills"
+      : (catById[activeFilter] || {}).name || "category";
     const subline =
       activeFilter === "all"
         ? `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"}${txns.length ? " · tap one to edit" : ""}`
-        : `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"} · ${fmt(filteredTotal)} in ${esc((catById[activeFilter] || {}).name || "category")}`;
+        : `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"} · ${fmt(filteredTotal)} in ${esc(filterName)}`;
 
     main.innerHTML = `
       <div class="card spend-sum">
@@ -1666,7 +1693,6 @@
           <button class="btn btn-ghost" id="rp-copy" style="flex:1;">📋 Copy</button>
           <button class="btn btn-ghost" id="rp-csv" style="flex:1;">⬇️ CSV</button>
         </div>
-        <p class="footer-note">Email drafts to ${esc(REPORT_EMAILS.join(" and "))}. CSV downloads the selected period's transactions.</p>
       </div>`;
 
     const closed = state.periods.filter((p) => p.closed).slice().reverse(); // newest first
