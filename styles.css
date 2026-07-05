@@ -54,15 +54,16 @@ body {
 }
 .tab {
   flex: 1;
-  padding: 9px 12px;
+  padding: 9px 6px;
   border: none;
   background: transparent;
   color: var(--text-dim);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   border-radius: 9px;
   cursor: pointer;
   transition: all 0.15s;
+  white-space: nowrap;
 }
 .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 
@@ -451,6 +452,22 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 
 /* Inline field validation */
 .field-error { color: var(--danger); font-size: 12.5px; margin-top: 6px; font-weight: 600; }
+
+/* Shared results view */
+.rs-grid { display: flex; gap: 8px; margin: 2px 0 8px; }
+.rs-grid > div { flex: 1; background: var(--surface-2); border-radius: 10px; padding: 10px 6px; text-align: center; }
+.rs-grid .rs-k { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 4px; }
+.rs-grid b { font-size: 15px; font-weight: 700; }
+.rs-pos { color: #0a7d3c; }
+.rs-neg { color: var(--danger); }
+.rs-cats { margin-top: 4px; }
+.rs-cat { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+.rs-cat:first-child { border-top: none; }
+.rs-cat-name { color: var(--text); }
+.rs-cat-amt { color: var(--text); font-weight: 600; white-space: nowrap; }
+.rs-of { color: var(--text-dim); font-weight: 400; font-size: 12px; }
+.rs-combined { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 10px; padding: 11px 12px; font-size: 13.5px; font-weight: 600; }
+.rs-combined b { font-size: 15px; }
 .input-invalid { border-color: var(--danger) !important; outline-color: var(--danger) !important; }
 
 /* Over-budget alert */

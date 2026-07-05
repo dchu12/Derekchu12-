@@ -10,11 +10,13 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "27";
+  const APP_VERSION = "28";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
   const BUDGET_KEY = "kelly";
+  const PERSON_NAME = "Kelly";  // whose budget this app publishes
+  const PARTNER_NAME = "Derek"; // the other person shown in shared Results
 
   /* ------------------------------------------------------------------ *
    * State
@@ -34,6 +36,8 @@
   let cloudUnsub = null;  // realtime budget listener unsubscribe
   let pushTimer = null;   // debounce handle for cloud writes
   let firstAuth = true;   // so we only show the first-visit sign-in prompt once
+  let resultsUnsub = [];  // realtime results listeners (both people)
+  const resultsCache = { kelly: null, derek: null }; // latest results docs
 
   function load() {
     try {
@@ -128,6 +132,44 @@
   // Total income for a period: the paycheck plus any extra income logged.
   const periodIncome = (p) =>
     Number(p.paycheckAmount || 0) + (p.extraIncome || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+
+  // Month-by-month summary for the shared Results view (published to Firestore).
+  function computeResults() {
+    const months = {};
+    state.periods.forEach((p) => {
+      const mk = (p.startDate || "").slice(0, 7); // YYYY-MM
+      if (!mk) return;
+      const m = months[mk] || (months[mk] = { income: 0, budgeted: 0, spent: 0, cats: {} });
+      m.income += periodIncome(p);
+      m.budgeted += totalBudgeted(p);
+      m.spent += totalSpent(p);
+      p.categories.forEach((c) => {
+        const cc = m.cats[c.name] || (m.cats[c.name] = { emoji: c.emoji || "", budgeted: 0, spent: 0 });
+        cc.budgeted += Number(c.budgeted || 0);
+        cc.spent += catSpent(p, c.id);
+      });
+    });
+    const list = Object.keys(months)
+      .sort()
+      .reverse()
+      .map((mk) => {
+        const m = months[mk];
+        return {
+          month: mk,
+          income: m.income,
+          budgeted: m.budgeted,
+          spent: m.spent,
+          saved: m.income - m.spent,
+          categories: Object.keys(m.cats).map((n) => ({
+            name: n,
+            emoji: m.cats[n].emoji,
+            budgeted: m.cats[n].budgeted,
+            spent: m.cats[n].spent,
+          })),
+        };
+      });
+    return { name: PERSON_NAME, updatedAt: Date.now(), months: list };
+  }
   // Actual money saved in a period = income minus everything spent.
   const periodSaved = (p) => periodIncome(p) - totalSpent(p);
   // Cumulative savings across all closed (finished) periods.
@@ -462,9 +504,10 @@
 
     const period = activePeriod();
 
-    // History and Report stay reachable even between paychecks (no active period).
+    // History, Report, and Results stay reachable even between paychecks (no active period).
     if (state.view === "history") return renderHistory();
     if (state.view === "report") return renderReport();
+    if (state.view === "results") return renderResults();
 
     if (!period) {
       // No active budget — force setup for the budgeting tabs.
@@ -1534,6 +1577,95 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Shared Results — combined monthly totals + category breakdown
+   * ------------------------------------------------------------------ */
+  function monthLabel(mk) {
+    const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const parts = String(mk).split("-");
+    return (names[Number(parts[1]) - 1] || "") + " " + parts[0];
+  }
+
+  function renderResults() {
+    if (!cloudOn()) {
+      main.innerHTML = `<div class="card"><h2>Shared results</h2><p class="sub">Cloud sync isn't available right now — reconnect to see combined monthly results.</p></div>`;
+      return;
+    }
+    if (!cloudUser) {
+      main.innerHTML = `<div class="card"><h2>Shared results</h2><p class="sub">Sign in to see your and ${esc(PARTNER_NAME)}'s combined monthly results.</p><button class="btn btn-primary btn-block" id="rs-signin">☁️ Sign in to sync</button></div>`;
+      const b = document.getElementById("rs-signin");
+      if (b) b.addEventListener("click", () => openLogin(false));
+      return;
+    }
+
+    const k = resultsCache.kelly;
+    const d = resultsCache.derek;
+    const monthSet = {};
+    [k, d].forEach((doc) => {
+      if (doc && doc.months) doc.months.forEach((m) => (monthSet[m.month] = true));
+    });
+    const months = Object.keys(monthSet).sort().reverse();
+
+    if (!months.length) {
+      main.innerHTML = `<div class="card"><h2>Shared results</h2><p class="sub">No results yet. Once you both have a budget going, each month's totals show up here.</p></div>`;
+      return;
+    }
+
+    const sel = state._resultsMonth && monthSet[state._resultsMonth] ? state._resultsMonth : months[0];
+    const monthOf = (doc) => (doc && doc.months ? doc.months.find((m) => m.month === sel) : null);
+    const km = monthOf(k);
+    const dm = monthOf(d);
+    const combinedSaved = (km ? km.saved : 0) + (dm ? dm.saved : 0);
+
+    const personCard = (title, m) => {
+      if (!m)
+        return `<div class="card"><h3>${esc(title)}</h3><p class="sub">No budget recorded for this month yet.</p></div>`;
+      const cats = m.categories
+        .slice()
+        .sort((a, b) => b.spent - a.spent)
+        .map(
+          (c) => `
+            <div class="rs-cat">
+              <span class="rs-cat-name">${esc(c.emoji || "")} ${esc(c.name)}</span>
+              <span class="rs-cat-amt">${fmt(c.spent)} <span class="rs-of">of ${fmt(c.budgeted)}</span></span>
+            </div>`
+        )
+        .join("");
+      return `
+        <div class="card">
+          <h3 style="margin-bottom:6px;">${esc(title)}</h3>
+          <div class="rs-grid">
+            <div><span class="rs-k">Income</span><b>${fmt(m.income)}</b></div>
+            <div><span class="rs-k">Spent</span><b>${fmt(m.spent)}</b></div>
+            <div><span class="rs-k">Saved</span><b class="${m.saved >= 0 ? "rs-pos" : "rs-neg"}">${fmt(m.saved)}</b></div>
+          </div>
+          <div class="rs-cats">${cats || '<p class="sub">No categories.</p>'}</div>
+        </div>`;
+    };
+
+    main.innerHTML = `
+      <div class="card">
+        <h2>Shared results</h2>
+        <p class="sub">You and ${esc(PARTNER_NAME)}'s totals for the month.</p>
+        <div class="field" style="margin-bottom:10px;">
+          <select id="rs-month">
+            ${months.map((mk) => `<option value="${mk}" ${mk === sel ? "selected" : ""}>${monthLabel(mk)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="rs-combined">Combined saved this month <b class="${combinedSaved >= 0 ? "rs-pos" : "rs-neg"}">${fmt(combinedSaved)}</b></div>
+      </div>
+      ${personCard((k && k.name) || "Kelly", km)}
+      ${personCard((d && d.name) || "Derek", dm)}
+    `;
+
+    const monthSel = document.getElementById("rs-month");
+    if (monthSel)
+      monthSel.addEventListener("change", (e) => {
+        state._resultsMonth = e.target.value;
+        renderResults();
+      });
+  }
+
+  /* ------------------------------------------------------------------ *
    * Settings — back up (export) and restore (import) all data
    * ------------------------------------------------------------------ */
   function exportData() {
@@ -1686,6 +1818,14 @@
   function startSync() {
     if (cloudUnsub) return;
     cloudUnsub = Cloud.watchBudget(BUDGET_KEY, onRemoteBudget);
+    ["kelly", "derek"].forEach((who) => {
+      resultsUnsub.push(
+        Cloud.watchResults(who, (doc) => {
+          resultsCache[who] = doc;
+          if (state.view === "results") renderResults();
+        })
+      );
+    });
   }
 
   function stopSync() {
@@ -1693,6 +1833,10 @@
       cloudUnsub();
       cloudUnsub = null;
     }
+    resultsUnsub.forEach((fn) => fn && fn());
+    resultsUnsub = [];
+    resultsCache.kelly = null;
+    resultsCache.derek = null;
   }
 
   // A remote budget doc arrived (initial load or the other person edited).
@@ -1731,11 +1875,13 @@
     const data = JSON.parse(JSON.stringify(state));
     delete data.view; // per-device UI, not shared
     delete data._reportId;
+    delete data._resultsMonth;
     Cloud.saveBudget(BUDGET_KEY, {
       data: data,
       updatedAt: state.updatedAt,
       updatedBy: currentEmail() || "",
     });
+    Cloud.saveResults(BUDGET_KEY, computeResults());
   }
 
   function schedulePush() {
