@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "41";
+  const APP_VERSION = "42";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -158,6 +158,74 @@
     const last = periodEnd(p); // next paycheck date
     last.setDate(last.getDate() - 1); // inclusive last day of this period
     return `${fmtShortDate(s)} – ${fmtShortDate(last)}`;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Concurrent-edit safety: merge transactions by id (union, newest-edit
+   * wins) with tombstones for deletes, so simultaneous logging by two
+   * people never drops a transaction.
+   * ------------------------------------------------------------------ */
+
+  // Delete a transaction and record a tombstone so it doesn't resurrect on merge.
+  function deleteTxn(p, txnId) {
+    const idx = p.transactions.findIndex((t) => t.id === txnId);
+    if (idx === -1) return null;
+    const [removed] = p.transactions.splice(idx, 1);
+    if (!p.deletedTxnIds) p.deletedTxnIds = {};
+    p.deletedTxnIds[txnId] = Date.now();
+    return { removed, idx };
+  }
+
+  // Restore a tombstoned transaction (Undo). Bump editedAt so it beats the tombstone on merge.
+  function restoreTxn(p, txnObj, idx) {
+    if (p.deletedTxnIds) delete p.deletedTxnIds[txnObj.id];
+    txnObj.editedAt = Date.now();
+    p.transactions.splice(Math.min(idx, p.transactions.length), 0, txnObj);
+  }
+
+  // Merge one period's transactions from a local and a remote copy.
+  function mergeTransactions(localP, remoteP) {
+    const tomb = {};
+    const addTomb = (m) => {
+      if (m) for (const k in m) tomb[k] = Math.max(tomb[k] || 0, m[k]);
+    };
+    addTomb(localP && localP.deletedTxnIds);
+    addTomb(remoteP && remoteP.deletedTxnIds);
+    const byId = {};
+    const consider = (t) => {
+      if (!t || !t.id) return;
+      const ex = byId[t.id];
+      if (!ex || (t.editedAt || 0) >= (ex.editedAt || 0)) byId[t.id] = t;
+    };
+    (remoteP && remoteP.transactions ? remoteP.transactions : []).forEach(consider);
+    (localP && localP.transactions ? localP.transactions : []).forEach(consider);
+    const live = Object.keys(byId)
+      .map((k) => byId[k])
+      .filter((t) => !(tomb[t.id] != null && tomb[t.id] >= (t.editedAt || 0)));
+    return { transactions: live, deletedTxnIds: tomb };
+  }
+
+  // Merge periods between a local state and an incoming (remote) state, in place on `merged`.
+  function mergePeriods(local, merged) {
+    const localById = {};
+    (local.periods || []).forEach((p) => (localById[p.id] = p));
+    const seen = {};
+    (merged.periods || []).forEach((rp) => {
+      seen[rp.id] = true;
+      const lp = localById[rp.id];
+      if (lp) {
+        const m = mergeTransactions(lp, rp);
+        rp.transactions = m.transactions;
+        rp.deletedTxnIds = m.deletedTxnIds;
+      }
+    });
+    // Keep periods created locally that the remote copy hasn't seen yet.
+    (local.periods || []).forEach((lp) => {
+      if (!seen[lp.id]) merged.periods.push(lp);
+    });
+    merged.periods.sort((a, b) =>
+      String(a.createdAt || a.startDate || "").localeCompare(String(b.createdAt || b.startDate || ""))
+    );
   }
 
   // Month-by-month summary for the shared Results view (published to Firestore).
@@ -743,6 +811,7 @@
             description: c.name,
             date: startDate,
             auto: true,
+            editedAt: Date.now(),
           });
         }
       });
@@ -1111,9 +1180,12 @@
         return;
       }
 
-      // Any transactions whose category was removed get dropped along with it.
+      // Any transactions whose category was removed get dropped (tombstoned so
+      // the removal survives a sync merge).
       const keptIds = new Set(kept.map((c) => c.id));
-      p.transactions = p.transactions.filter((t) => keptIds.has(t.categoryId));
+      p.transactions.slice().forEach((t) => {
+        if (!keptIds.has(t.categoryId)) deleteTxn(p, t.id);
+      });
       p.categories = kept;
 
       // Remember the new layout for the next payday.
@@ -1215,15 +1287,12 @@
 
     main.querySelectorAll("[data-rm]").forEach((btn) =>
       btn.addEventListener("click", () => {
-        const id = btn.dataset.rm;
-        const idx = p.transactions.findIndex((t) => t.id === id);
-        if (idx === -1) return;
-        const [removed] = p.transactions.splice(idx, 1);
+        const res = deleteTxn(p, btn.dataset.rm);
+        if (!res) return;
         save();
         render();
         showToast("Transaction deleted", "Undo", () => {
-          // Restore at its original position.
-          p.transactions.splice(Math.min(idx, p.transactions.length), 0, removed);
+          restoreTxn(p, res.removed, res.idx);
           save();
           render();
         });
@@ -1306,9 +1375,9 @@
       const beforeOver = overBudgetIds(p);
       const beforeClose = closeIds(p);
       if (editing) {
-        Object.assign(editTxn, fields);
+        Object.assign(editTxn, fields, { editedAt: Date.now() });
       } else {
-        p.transactions.push({ id: uid(), ...fields });
+        p.transactions.push({ id: uid(), ...fields, editedAt: Date.now() });
       }
       save();
       // Editing from History (a closed period): just return to the detail view.
@@ -1788,14 +1857,12 @@
     );
     modalRoot.querySelectorAll("[data-rm]").forEach((btn) =>
       btn.addEventListener("click", () => {
-        const tid = btn.dataset.rm;
-        const idx = p.transactions.findIndex((x) => x.id === tid);
-        if (idx === -1) return;
-        const [removed] = p.transactions.splice(idx, 1);
+        const res = deleteTxn(p, btn.dataset.rm);
+        if (!res) return;
         save();
         reopen();
         showToast("Transaction deleted", "Undo", () => {
-          p.transactions.splice(Math.min(idx, p.transactions.length), 0, removed);
+          restoreTxn(p, res.removed, res.idx);
           save();
           reopen();
         });
@@ -2293,13 +2360,15 @@
   }
 
   function adoptRemote(remote) {
-    const incoming = remote.data;
+    const localState = state;
     const keepView = state.view;
     const keepReport = state._reportId;
-    state = migrateState(Object.assign(defaultState(), incoming));
-    state.view = keepView; // don't yank the other person's tab around
-    if (keepReport) state._reportId = keepReport;
-    state.updatedAt = remote.updatedAt;
+    const merged = migrateState(Object.assign(defaultState(), remote.data));
+    mergePeriods(localState, merged); // union periods + merge transactions (no lost logs)
+    merged.view = keepView; // don't yank the other person's tab around
+    if (keepReport) merged._reportId = keepReport;
+    merged.updatedAt = remote.updatedAt;
+    state = merged;
     persistLocal();
     render();
     if (remote.updatedBy && remote.updatedBy !== currentEmail()) {
