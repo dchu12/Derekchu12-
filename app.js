@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "63";
+  const APP_VERSION = "64";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -941,7 +941,7 @@
 
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
-          <h2 style="margin:0;">Categories</h2>
+          <h2 style="margin:0;">Expense Categories</h2>
           <button class="btn btn-ghost btn-sm" id="manage-cats">Manage</button>
         </div>
         ${cats}

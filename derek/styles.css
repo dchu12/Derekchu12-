@@ -120,7 +120,7 @@ body {
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); }
 .sstat { text-align: center; padding: 2px 6px; }
 .sstat + .sstat { border-left: 1px solid var(--border); }
-.sk { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+.sk { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); margin-bottom: 6px; }
 .sv { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .sv.neg { color: var(--danger); }
 
@@ -391,7 +391,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .ov-name { font-weight: 600; }
 .ov-count { font-size: 12.5px; color: var(--warn); font-weight: 600; white-space: nowrap; }
 
-.section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); margin: 6px 0 10px; }
+.section-label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text); margin: 6px 0 10px; }
 
 /* Collapsible section header (Fixed bills) */
 .section-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none; padding: 4px 2px 10px; cursor: pointer; color: inherit; font: inherit; }
