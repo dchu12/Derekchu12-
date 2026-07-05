@@ -489,6 +489,17 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .safety-text { font-size: 13px; font-weight: 500; line-height: 1.4; margin-bottom: 10px; }
 .safety-actions { display: flex; gap: 8px; align-items: center; }
 .safety-x { margin-left: auto; background: none; border: none; color: #835b16; font-size: 15px; cursor: pointer; padding: 4px 6px; line-height: 1; }
+
+/* Spending patterns (History insights) */
+.pat-item { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+.pat-list .pat-item:first-child { border-top: none; }
+.pat-name { color: var(--text); }
+.pat-nums { color: var(--text-dim); white-space: nowrap; }
+.pat-nums b { color: var(--text); }
+.pat-trend { font-weight: 700; }
+.pat-trend.up { color: #b8860b; }
+.pat-trend.down { color: #0a7d3c; }
+.pat-trend.steady { color: var(--text-dim); }
 .input-invalid { border-color: var(--danger) !important; outline-color: var(--danger) !important; }
 
 /* Over-budget alert */

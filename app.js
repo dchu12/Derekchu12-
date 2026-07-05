@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "39";
+  const APP_VERSION = "40";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1436,6 +1436,42 @@
     );
     const topOver = Object.entries(overCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
+    // Per-category spending averages across closed periods (closed is newest-first).
+    const catStats = {};
+    closed.forEach((p) =>
+      p.categories.forEach((c) => {
+        const key = `${c.emoji}||${c.name}`;
+        const s = catStats[key] || (catStats[key] = { emoji: c.emoji, name: c.name, total: 0, count: 0, last: null });
+        const cs = catSpent(p, c.id);
+        s.total += cs;
+        s.count += 1;
+        if (s.last === null) s.last = cs; // first seen = most recent
+      })
+    );
+    const patterns = Object.values(catStats)
+      .map((s) => ({ ...s, avg: s.total / s.count }))
+      .filter((s) => s.avg > 0.005)
+      .sort((a, b) => b.avg - a.avg)
+      .slice(0, 6);
+    const patternsCard = patterns.length
+      ? `<div class="card">
+           <h2>Spending patterns</h2>
+           <p class="sub">Your average spend per pay period, by category (↑ higher than usual · ↓ lower).</p>
+           <div class="pat-list">
+             ${patterns
+               .map((s) => {
+                 const trend = s.last > s.avg * 1.15 ? "up" : s.last < s.avg * 0.85 ? "down" : "steady";
+                 const arrow = trend === "up" ? "↑" : trend === "down" ? "↓" : "→";
+                 return `<div class="pat-item">
+                     <span class="pat-name">${esc(s.emoji)} ${esc(s.name)}</span>
+                     <span class="pat-nums">avg <b>${fmt(s.avg)}</b> · last ${fmt(s.last)} <span class="pat-trend ${trend}">${arrow}</span></span>
+                   </div>`;
+               })
+               .join("")}
+           </div>
+         </div>`
+      : "";
+
     const goal = state.goal;
     const goalPct = goal && goal.target > 0 ? Math.min(100, (Math.max(0, totalSaved) / goal.target) * 100) : 0;
     const goalHtml = goal
@@ -1492,6 +1528,8 @@
       </div>`
           : ""
       }
+
+      ${patternsCard}
 
       <div class="card">
         <h2>Past pay periods</h2>
