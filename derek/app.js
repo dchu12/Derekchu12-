@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "22";
+  const APP_VERSION = "26";
 
   /* ------------------------------------------------------------------ *
    * State
