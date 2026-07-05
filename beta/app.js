@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "87";
+  const APP_VERSION = "88";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -60,7 +60,9 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return defaultState();
       const parsed = JSON.parse(raw);
-      return migrateState(Object.assign(defaultState(), parsed));
+      const st = migrateState(Object.assign(defaultState(), parsed));
+      st.view = "dashboard"; // always land on Overview after a refresh
+      return st;
     } catch (e) {
       console.warn("Failed to load state, starting fresh.", e);
       return defaultState();
