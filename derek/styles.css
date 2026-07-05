@@ -105,12 +105,19 @@ body {
 .days-pill {
   display: inline-block;
   background: rgba(255,255,255,0.2);
-  padding: 3px 10px;
+  padding: 5px 12px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   margin-top: 8px;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
 }
+.days-pill:active { background: rgba(255,255,255,0.3); }
+.pd-next { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; color: var(--text-dim); }
+.pd-next b { color: var(--text); }
 
 /* Category rows */
 .cat-row { padding: 12px 0; border-bottom: 1px solid var(--border); }

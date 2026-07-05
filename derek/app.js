@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "29";
+  const APP_VERSION = "30";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -47,6 +47,7 @@
   const wsPushTimer = { derek: null, kelly: null }; // per-workspace debounce handles
   let resultsUnsub = [];  // realtime results listeners (both people)
   const resultsCache = { kelly: null, derek: null }; // latest results docs
+  const resultsSeeded = { derek: false, kelly: false }; // publish each summary once after first sync
 
   function loadWS(who) {
     try {
@@ -108,6 +109,10 @@
   };
 
   const todayISO = () => new Date().toISOString().slice(0, 10);
+
+  // Format a Date object as a local YYYY-MM-DD (avoids UTC off-by-one).
+  const dateToISO = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   function parseDate(iso) {
     // Treat ISO date as local, not UTC, to avoid off-by-one.
@@ -774,7 +779,7 @@
       <div class="card hero">
         <div class="label">Left to spend</div>
         <div class="amount">${fmt(remaining)}</div>
-        <div class="days-pill">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`}</div>
+        <button type="button" class="days-pill" id="edit-dates" aria-label="Edit pay period dates" title="Edit pay period dates">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`} ✏️</button>
       </div>
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
@@ -800,13 +805,14 @@
 
       <button class="btn btn-ghost btn-block" id="add-income">➕ Add extra income</button>
       <button class="btn btn-ghost btn-block" id="new-payday" style="margin-top:10px;">💵 Got paid? Start a new pay period</button>
-      <p class="footer-note">Extra income (a bonus or second paycheck) adds to what you save this period.</p>
     `;
 
     document.getElementById("quick-add").addEventListener("click", () => openSpendModal(p));
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     document.getElementById("add-income").addEventListener("click", () => openIncomeModal(p));
     document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
+    const ed = document.getElementById("edit-dates");
+    if (ed) ed.addEventListener("click", () => openPeriodDates(p));
     const pe = document.getElementById("period-ended");
     if (pe) pe.addEventListener("click", () => confirmNewPayday(p));
     const ft = document.getElementById("fixed-toggle");
@@ -819,6 +825,68 @@
     main.querySelectorAll(".cat-row-tap").forEach((el) =>
       el.addEventListener("click", () => openSpendModal(p, el.dataset.cat))
     );
+  }
+
+  /* ---------- Edit the current pay period's dates ---------- */
+  function openPeriodDates(p) {
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Edit pay period dates">
+          <h2>Pay period dates</h2>
+          <p class="sub">Set the day you were last paid and how often you're paid — this drives the countdown to your next paycheck.</p>
+          <div class="field">
+            <label for="pd-start">Last paid on</label>
+            <input id="pd-start" type="date" value="${esc(p.startDate)}" />
+          </div>
+          <div class="field">
+            <label for="pd-freq">Pay frequency</label>
+            <select id="pd-freq">
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Every 2 weeks</option>
+              <option value="semimonthly">Twice a month</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="pd-next" id="pd-next"></div>
+          <div class="field-row" style="margin-top:14px;">
+            <button class="btn btn-ghost" id="pd-cancel" style="flex:1;">Cancel</button>
+            <button class="btn btn-primary" id="pd-save" style="flex:2;">Save</button>
+          </div>
+        </div>
+      </div>
+    `);
+    const startEl = document.getElementById("pd-start");
+    const freqEl = document.getElementById("pd-freq");
+    const nextEl = document.getElementById("pd-next");
+    freqEl.value = p.frequency || "biweekly";
+
+    const refresh = () => {
+      const s = startEl.value;
+      if (!s) {
+        nextEl.textContent = "";
+        return;
+      }
+      const end = periodEnd({ startDate: s, frequency: freqEl.value });
+      nextEl.innerHTML = `Next paycheck: <b>${esc(fmtDateLong(dateToISO(end)))}</b>`;
+    };
+    startEl.addEventListener("change", refresh);
+    freqEl.addEventListener("change", refresh);
+    refresh();
+
+    document.getElementById("pd-cancel").addEventListener("click", close);
+    document.getElementById("pd-save").addEventListener("click", () => {
+      const s = startEl.value;
+      if (!s) {
+        showToast("Pick the date you were last paid.");
+        return;
+      }
+      p.startDate = s;
+      p.frequency = freqEl.value;
+      save();
+      close();
+      render();
+      showToast("Pay period updated ✓");
+    });
   }
 
   /* ---------- Add extra income to the current period ---------- */
@@ -1627,7 +1695,10 @@
       return;
     }
 
-    const sel = state._resultsMonth && monthSet[state._resultsMonth] ? state._resultsMonth : months[0];
+    // Default to *your own* latest month so you always see your data first.
+    const ownMonths = (resultsCache[BUDGET_KEY] && resultsCache[BUDGET_KEY].months) || [];
+    const defMonth = ownMonths.length ? ownMonths[0].month : months[0];
+    const sel = state._resultsMonth && monthSet[state._resultsMonth] ? state._resultsMonth : defMonth;
     const monthOf = (doc) => (doc && doc.months ? doc.months.find((m) => m.month === sel) : null);
     const km = monthOf(k);
     const dm = monthOf(d);
@@ -1870,12 +1941,17 @@
     updateWsSwitcher();
   }
 
+  function publishResults(who) {
+    if (cloudUser) Cloud.saveResults(who, computeResultsFor(wsState[who], WORKSPACES[who].name));
+  }
+
   // A remote budget doc arrived for `who` (initial load or the other person edited).
   function onRemoteBudget(who, remote) {
     const st = wsState[who];
     const localAt = st.updatedAt || 0;
     if (!remote) {
-      pushCloud(who); // cloud is empty — seed it from this device
+      pushCloud(who); // cloud is empty — seed it from this device (also publishes results)
+      resultsSeeded[who] = true;
       return;
     }
     const remoteAt = remote.updatedAt || 0;
@@ -1883,6 +1959,12 @@
       adoptRemote(who, remote);
     } else if (localAt > remoteAt) {
       pushCloud(who); // our local copy is newer — push it up
+    }
+    // Ensure each results summary is published at least once after first sync,
+    // even when the budget was already up to date (no edit to trigger a push).
+    if (!resultsSeeded[who]) {
+      publishResults(who);
+      resultsSeeded[who] = true;
     }
   }
 
