@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "35";
+  const APP_VERSION = "36";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1185,7 +1185,7 @@
   }
 
   // editTxn: pass an existing transaction to edit it instead of adding a new one.
-  function openSpendModal(p, presetCatId, editTxn) {
+  function openSpendModal(p, presetCatId, editTxn, afterSave) {
     const cats = p.categories;
     const editing = !!editTxn;
     let selectedCat =
@@ -1264,6 +1264,12 @@
         p.transactions.push({ id: uid(), ...fields });
       }
       save();
+      // Editing from History (a closed period): just return to the detail view.
+      if (afterSave) {
+        close();
+        afterSave();
+        return;
+      }
       const afterOver = overBudgetIds(p);
       const afterClose = closeIds(p);
       const newlyOver = p.categories.filter((c) => afterOver.has(c.id) && !beforeOver.has(c.id));
@@ -1542,7 +1548,14 @@
     const p = state.periods.find((x) => x.id === id);
     if (!p) return;
     const spent = totalSpent(p);
-    const cats = p.categories
+    const catById = Object.fromEntries(p.categories.map((c) => [c.id, c]));
+    // Re-render the History list and reopen this detail (used after an edit/delete).
+    const reopen = () => {
+      render();
+      openHistoryDetail(id);
+    };
+
+    const catSummary = p.categories
       .map((c) => {
         const cs = catSpent(p, c.id);
         const over = cs > c.budgeted + 0.005;
@@ -1553,19 +1566,72 @@
       })
       .join("");
 
+    const txns = [...p.transactions].sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id));
+    const txnList = txns.length
+      ? txns
+          .map((t) => {
+            const c = catById[t.categoryId] || { emoji: "❓", name: "Uncategorized" };
+            return `
+          <div class="txn" data-id="${t.id}">
+            <button type="button" class="txn-left txn-edit" data-edit="${t.id}" aria-label="Edit ${esc(t.description || c.name)}">
+              <div class="txn-emoji">${esc(c.emoji)}</div>
+              <div>
+                <div class="txn-desc">${esc(t.description || c.name)}</div>
+                <div class="txn-meta">${esc(c.name)} · ${esc(t.date)}</div>
+              </div>
+            </button>
+            <div style="display:flex;align-items:center;">
+              <span class="txn-amt">${fmt(t.amount)}</span>
+              <button class="rm" data-rm="${t.id}" title="Delete" aria-label="Delete ${esc(t.description || c.name)}">🗑</button>
+            </div>
+          </div>`;
+          })
+          .join("")
+      : `<p class="sub" style="margin-top:8px;">No transactions recorded.</p>`;
+
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Pay period details">
           <h2>${esc(fmtDateLong(p.startDate))}</h2>
           <p class="sub">Paid ${fmt(p.paycheckAmount)} · ${freqLabel(p.frequency)} · spent ${fmt(spent)}</p>
-          ${cats}
+          ${catSummary}
+          <div class="divider"></div>
+          <div class="section-label" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Transactions</span>
+            <button class="btn btn-ghost btn-sm" id="hist-add" style="margin:0;">+ Add</button>
+          </div>
+          <p class="footer-note" style="margin:2px 0 6px;">Tap a transaction to edit it, or 🗑 to remove it.</p>
+          <div class="hist-txns">${txnList}</div>
           <div class="divider"></div>
           <button class="btn btn-danger btn-block btn-sm" id="hist-del">Delete this record</button>
           <button class="btn btn-ghost btn-block" id="hist-close" style="margin-top:8px;">Close</button>
         </div>
       </div>
     `);
+
     document.getElementById("hist-close").addEventListener("click", close);
+    document.getElementById("hist-add").addEventListener("click", () => openSpendModal(p, null, null, reopen));
+    modalRoot.querySelectorAll("[data-edit]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const t = p.transactions.find((x) => x.id === btn.dataset.edit);
+        if (t) openSpendModal(p, null, t, reopen);
+      })
+    );
+    modalRoot.querySelectorAll("[data-rm]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const tid = btn.dataset.rm;
+        const idx = p.transactions.findIndex((x) => x.id === tid);
+        if (idx === -1) return;
+        const [removed] = p.transactions.splice(idx, 1);
+        save();
+        reopen();
+        showToast("Transaction deleted", "Undo", () => {
+          p.transactions.splice(Math.min(idx, p.transactions.length), 0, removed);
+          save();
+          reopen();
+        });
+      })
+    );
     document.getElementById("hist-del").addEventListener("click", () => {
       if (confirm("Delete this pay period record permanently?")) {
         state.periods = state.periods.filter((x) => x.id !== id);
