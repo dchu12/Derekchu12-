@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "71";
+  const APP_VERSION = "72";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1251,20 +1251,22 @@
 
     const catById = Object.fromEntries(p.categories.map((c) => [c.id, c]));
     const total = totalSpent(p);
+    // Top categories = discretionary only (exclude fixed bills — they don't vary).
     const catTotals = p.categories
       .map((c) => ({ c, amt: catSpent(p, c.id) }))
-      .filter((x) => x.amt > 0)
+      .filter((x) => x.amt > 0 && !x.c.fixed)
       .sort((a, b) => b.amt - a.amt);
+    const discTotal = catTotals.reduce((s, x) => s + x.amt, 0);
     const topCats = catTotals.slice(0, 3);
-    // Donut breakdown: top 3 categories + "Other" for the rest.
+    // Donut breakdown: top 3 discretionary categories + "Other" for the rest.
     const segTotal = topCats.reduce((s, x) => s + x.amt, 0);
-    const otherAmt = Math.max(0, total - segTotal);
+    const otherAmt = Math.max(0, discTotal - segTotal);
     const segs = topCats.map((x, i) => ({ label: `${x.c.emoji} ${x.c.name}`, amt: x.amt, color: `var(--seg${i + 1})` }));
     if (otherAmt > 0.005) segs.push({ label: "Other", amt: otherAmt, color: "var(--seg-other)" });
     let donutCum = 0;
     const donutArcs = segs
       .map((s) => {
-        const pct = total > 0 ? (s.amt / total) * 100 : 0;
+        const pct = discTotal > 0 ? (s.amt / discTotal) * 100 : 0;
         const off = 25 - donutCum;
         donutCum += pct;
         return `<circle cx="21" cy="21" r="15.915" fill="none" stroke="${s.color}" stroke-width="5" stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"></circle>`;
@@ -1334,7 +1336,7 @@
         <div class="ss-total">${fmt(total)}</div>
         <div class="ss-range">${esc(periodRangeLabel(p))}</div>
         ${topCats.length ? `<div class="ss-top">
-          <div class="ss-top-label">Top categories</div>
+          <div class="ss-top-label">Top discretionary spending</div>
           <div class="dn-wrap">
             <div class="dn-chart"><svg viewBox="0 0 42 42" aria-hidden="true"><circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--surface-2)" stroke-width="5"></circle>${donutArcs}</svg></div>
             <div class="dn-legend">${donutLegend}</div>
