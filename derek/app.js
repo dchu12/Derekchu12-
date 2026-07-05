@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "78";
+  const APP_VERSION = "79";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -961,7 +961,7 @@
         (fixedCollapsed ? "" : fixedCats.map(renderCat).join(""));
       if (spendCats.length) {
         cats +=
-          `<div class="section-label cat-section-gap">Spending</div>` +
+          `<div class="section-label cat-section-gap">Discretionary Spending</div>` +
           spendCats.map(renderCat).join("");
       }
     } else {
