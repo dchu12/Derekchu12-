@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "73";
+  const APP_VERSION = "74";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -617,6 +617,9 @@
   }
 
   function render() {
+    // "History" and "Report" are now one combined "Reports" tab.
+    if (state.view === "history") state.view = "report";
+
     // Sync tab highlight
     document.querySelectorAll(".tab").forEach((t) =>
       t.classList.toggle("active", t.dataset.view === state.view)
@@ -628,9 +631,8 @@
     const headerLog = document.getElementById("header-log");
     if (headerLog) headerLog.hidden = !period;
 
-    // History, Report, and Results stay reachable even between paychecks (no active period).
-    if (state.view === "history") return renderHistory();
-    if (state.view === "report") return renderReport();
+    // Reports (history + export) and Results stay reachable even between paychecks (no active period).
+    if (state.view === "report") return renderHistory();
     if (state.view === "results") return renderResults();
 
     if (!period) {
@@ -1564,17 +1566,40 @@
 
   /* ---------- History ---------- */
   function renderHistory() {
-    const closed = state.periods.filter((p) => p.closed).slice().reverse(); // newest first
-
-    if (closed.length === 0) {
-      main.innerHTML = `<div class="empty"><div class="big">📊</div><h2>No history yet</h2><p>Finish a pay period and it lands here — with your total saved, trends, and spending patterns over time.</p></div>`;
+    const periodsAll = state.periods.slice().reverse(); // newest first (incl. active)
+    if (periodsAll.length === 0) {
+      main.innerHTML = `<div class="empty"><div class="big">📊</div><h2>Nothing here yet</h2><p>Set up a pay period first — then review your history and export reports here.</p></div>`;
       return;
     }
 
+    // Compact export/share card (no full-text preview).
+    if (!state._reportId || !periodsAll.some((p) => p.id === state._reportId)) state._reportId = periodsAll[0].id;
+    const rptSel = periodsAll.find((p) => p.id === state._reportId);
+    const rpt = buildReport(rptSel);
+    const canShare = typeof navigator !== "undefined" && !!navigator.share;
+    const exportCard = `
+      <div class="card">
+        <h2>Export &amp; share</h2>
+        <p class="sub">Pick a pay period, then email, copy, or download it.</p>
+        <div class="field" style="margin-bottom:12px;">
+          <label>Pay period</label>
+          <select id="rp-period">${periodsAll.map((p) => `<option value="${p.id}" ${p.id === rptSel.id ? "selected" : ""}>${esc(fmtDateLong(p.startDate))}${p.closed ? "" : " (current)"}</option>`).join("")}</select>
+        </div>
+        ${canShare ? `<button class="btn btn-primary btn-block" id="rp-share" style="margin-bottom:10px;">📤 Share…</button>` : ""}
+        <div class="field-row">
+          <button class="btn btn-ghost" id="rp-email" style="flex:1;">✉️ Email</button>
+          <button class="btn btn-ghost" id="rp-copy" style="flex:1;">📋 Copy</button>
+          <button class="btn btn-ghost" id="rp-csv" style="flex:1;">⬇️ CSV</button>
+        </div>
+        <p class="footer-note">Email drafts to ${esc(REPORT_EMAILS.join(" and "))}. CSV downloads the selected period's transactions.</p>
+      </div>`;
+
+    const closed = state.periods.filter((p) => p.closed).slice().reverse(); // newest first
+    const hasHistory = closed.length > 0;
     const n = closed.length;
-    const totalSaved = totalSavedToDate();
-    const avgSaved = closed.reduce((s, p) => s + periodSaved(p), 0) / n;
-    const avgSpent = closed.reduce((s, p) => s + totalSpent(p), 0) / n;
+    const totalSaved = hasHistory ? totalSavedToDate() : 0;
+    const avgSaved = hasHistory ? closed.reduce((s, p) => s + periodSaved(p), 0) / n : 0;
+    const avgSpent = hasHistory ? closed.reduce((s, p) => s + totalSpent(p), 0) / n : 0;
 
     // Savings per period — oldest→newest, most recent 8.
     const chrono = closed.slice().reverse().slice(-8);
@@ -1678,21 +1703,21 @@
       })
       .join("");
 
-    main.innerHTML = `
+    main.innerHTML =
+      exportCard +
+      goalsCard +
+      (hasHistory
+        ? `
       <div class="card">
         <div class="ins-label">Total saved to date</div>
         <div class="ins-amount ${totalSaved < 0 ? "neg" : ""}">${fmt(totalSaved)}</div>
         <div class="ins-sub">across ${n} pay period${n === 1 ? "" : "s"} · avg ${fmt(avgSaved)} saved · ${fmt(avgSpent)} spent</div>
       </div>
-
-      ${goalsCard}
-
       <div class="card">
         <h2>Saved per period</h2>
         <p class="sub">Most recent ${chrono.length} period${chrono.length === 1 ? "" : "s"}.</p>
         ${chart}
       </div>
-
       ${
         topOver.length
           ? `<div class="card">
@@ -1707,15 +1732,20 @@
       </div>`
           : ""
       }
-
       ${patternsCard}
-
       <div class="card">
         <h2>Past pay periods</h2>
         <p class="sub">Tap one to see the details.</p>
         ${items}
-      </div>
-    `;
+      </div>`
+        : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`);
+
+    document.getElementById("rp-period").addEventListener("change", (e) => { state._reportId = e.target.value; render(); });
+    const rpShare = document.getElementById("rp-share");
+    if (rpShare) rpShare.addEventListener("click", async () => { try { await navigator.share({ title: rpt.subject, text: rpt.text }); } catch (e) {} });
+    document.getElementById("rp-email").addEventListener("click", () => { window.location.href = "mailto:" + REPORT_EMAILS.join(",") + "?subject=" + encodeURIComponent(rpt.subject) + "&body=" + encodeURIComponent(rpt.text); });
+    document.getElementById("rp-copy").addEventListener("click", async (e) => { const btn = e.currentTarget; try { await navigator.clipboard.writeText(rpt.text); } catch { const ta = document.createElement("textarea"); ta.value = rpt.text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch {} document.body.removeChild(ta); } const orig = btn.textContent; btn.textContent = "✓ Copied"; setTimeout(() => (btn.textContent = orig), 1500); });
+    document.getElementById("rp-csv").addEventListener("click", () => { exportCSV(rptSel); showToast("CSV downloaded ✓"); });
 
     main.querySelectorAll(".hist-item").forEach((el) =>
       el.addEventListener("click", () => openHistoryDetail(el.dataset.id))
