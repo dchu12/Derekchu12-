@@ -451,6 +451,11 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 /* Inline field validation */
 .field-error { color: var(--danger); font-size: 12.5px; margin-top: 6px; font-weight: 600; }
 
+/* Owner budget switcher (Derek's app) */
+.ws-switch { display: flex; gap: 6px; margin-bottom: 14px; background: var(--surface-2); padding: 4px; border-radius: 12px; }
+.ws-btn { flex: 1; padding: 9px 8px; border: none; background: transparent; color: var(--text-dim); font-size: 13px; font-weight: 700; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.ws-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
 /* Shared results view */
 .rs-grid { display: flex; gap: 8px; margin: 2px 0 8px; }
 .rs-grid > div { flex: 1; background: var(--surface-2); border-radius: 10px; padding: 10px 6px; text-align: center; }

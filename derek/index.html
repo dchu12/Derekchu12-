@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-  <link rel="stylesheet" href="styles.css?v=28" />
+  <link rel="stylesheet" href="styles.css?v=29" />
   <link rel="manifest" href="manifest.json" />
 </head>
 <body>
@@ -29,6 +29,9 @@
       </nav>
     </header>
 
+    <!-- Owner-only budget switcher (My budget / Kelly's budget), shown when signed in -->
+    <div id="ws-switch" class="ws-switch" hidden></div>
+
     <main id="main">
       <!-- Views are rendered here by app.js -->
     </main>
@@ -41,8 +44,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="cloud.js?v=28"></script>
-  <script src="app.js?v=28"></script>
+  <script src="cloud.js?v=29"></script>
+  <script src="app.js?v=29"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));

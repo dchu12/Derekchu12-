@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "28";
+  const APP_VERSION = "29";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -29,33 +29,41 @@
     view: "dashboard",
   });
 
-  let state = load();
+  /* Derek's app manages two budgets: his own ("derek") and — for the owner —
+   * Kelly's ("kelly", a synced mirror). `active` selects which one the UI shows;
+   * `state` always points at the active workspace's state object. */
+  const WORKSPACES = {
+    derek: { key: "derek", name: "Derek", storage: STORAGE_KEY },
+    kelly: { key: "kelly", name: "Kelly", storage: "payday-budget-kelly-mirror-v1" },
+  };
+  let active = "derek";
+  const wsState = { derek: loadWS("derek"), kelly: loadWS("kelly") };
+  let state = wsState[active];
 
   // Cloud sync (Firebase) — entirely optional. The app is fully usable signed out.
   let cloudUser = null;   // current Firebase user, or null
-  let cloudUnsub = null;  // realtime budget listener unsubscribe
-  let pushTimer = null;   // debounce handle for cloud writes
   let firstAuth = true;   // so we only show the first-visit sign-in prompt once
+  const wsUnsub = { derek: null, kelly: null };     // per-workspace budget listeners
+  const wsPushTimer = { derek: null, kelly: null }; // per-workspace debounce handles
   let resultsUnsub = [];  // realtime results listeners (both people)
   const resultsCache = { kelly: null, derek: null }; // latest results docs
 
-  function load() {
+  function loadWS(who) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(WORKSPACES[who].storage);
       if (!raw) return defaultState();
-      const parsed = JSON.parse(raw);
-      return Object.assign(defaultState(), parsed);
+      return Object.assign(defaultState(), JSON.parse(raw));
     } catch (e) {
       console.warn("Failed to load state, starting fresh.", e);
       return defaultState();
     }
   }
 
-  // Write to localStorage without touching the sync timestamp (used when
-  // adopting a remote change, so it doesn't bounce straight back to the cloud).
-  function persistLocal() {
+  // Write a workspace to localStorage without touching its sync timestamp.
+  function persistLocal(who) {
+    who = who || active;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(WORKSPACES[who].storage, JSON.stringify(wsState[who]));
     } catch (e) {
       console.error("Failed to save state", e);
     }
@@ -63,8 +71,18 @@
 
   function save() {
     state.updatedAt = Date.now();
-    persistLocal();
-    schedulePush();
+    wsState[active] = state;
+    persistLocal(active);
+    schedulePush(active);
+  }
+
+  // Switch which budget the UI is showing/editing (owner only).
+  function setActive(who) {
+    if (!WORKSPACES[who] || who === active) return;
+    active = who;
+    state = wsState[who];
+    updateWsSwitcher();
+    render();
   }
 
   /* ------------------------------------------------------------------ *
@@ -134,9 +152,9 @@
     Number(p.paycheckAmount || 0) + (p.extraIncome || []).reduce((s, i) => s + Number(i.amount || 0), 0);
 
   // Month-by-month summary for the shared Results view (published to Firestore).
-  function computeResults() {
+  function computeResultsFor(st, personName) {
     const months = {};
-    state.periods.forEach((p) => {
+    st.periods.forEach((p) => {
       const mk = (p.startDate || "").slice(0, 7); // YYYY-MM
       if (!mk) return;
       const m = months[mk] || (months[mk] = { income: 0, budgeted: 0, spent: 0, cats: {} });
@@ -168,7 +186,7 @@
           })),
         };
       });
-    return { name: PERSON_NAME, updatedAt: Date.now(), months: list };
+    return { name: personName, updatedAt: Date.now(), months: list };
   }
   // Actual money saved in a period = income minus everything spent.
   const periodSaved = (p) => periodIncome(p) - totalSpent(p);
@@ -1815,78 +1833,112 @@
   }
 
   function startSync() {
-    if (cloudUnsub) return;
-    cloudUnsub = Cloud.watchBudget(BUDGET_KEY, onRemoteBudget);
-    ["kelly", "derek"].forEach((who) => {
-      resultsUnsub.push(
-        Cloud.watchResults(who, (doc) => {
-          resultsCache[who] = doc;
-          if (state.view === "results") renderResults();
-        })
-      );
+    // Derek (owner) syncs both his own budget and Kelly's mirror.
+    ["derek", "kelly"].forEach((who) => {
+      if (!wsUnsub[who]) wsUnsub[who] = Cloud.watchBudget(who, (r) => onRemoteBudget(who, r));
     });
+    if (!resultsUnsub.length) {
+      ["kelly", "derek"].forEach((who) => {
+        resultsUnsub.push(
+          Cloud.watchResults(who, (doc) => {
+            resultsCache[who] = doc;
+            if (state.view === "results") renderResults();
+          })
+        );
+      });
+    }
+    updateWsSwitcher();
   }
 
   function stopSync() {
-    if (cloudUnsub) {
-      cloudUnsub();
-      cloudUnsub = null;
-    }
+    Object.keys(wsUnsub).forEach((who) => {
+      if (wsUnsub[who]) {
+        wsUnsub[who]();
+        wsUnsub[who] = null;
+      }
+    });
     resultsUnsub.forEach((fn) => fn && fn());
     resultsUnsub = [];
     resultsCache.kelly = null;
     resultsCache.derek = null;
+    // Signed out → only your own budget is available.
+    if (active !== "derek") {
+      active = "derek";
+      state = wsState.derek;
+      render();
+    }
+    updateWsSwitcher();
   }
 
-  // A remote budget doc arrived (initial load or the other person edited).
-  function onRemoteBudget(remote) {
-    const localAt = state.updatedAt || 0;
+  // A remote budget doc arrived for `who` (initial load or the other person edited).
+  function onRemoteBudget(who, remote) {
+    const st = wsState[who];
+    const localAt = st.updatedAt || 0;
     if (!remote) {
-      pushCloud(); // cloud is empty — seed it from this device
+      pushCloud(who); // cloud is empty — seed it from this device
       return;
     }
     const remoteAt = remote.updatedAt || 0;
     if (remoteAt > localAt && remote.data) {
-      adoptRemote(remote);
+      adoptRemote(who, remote);
     } else if (localAt > remoteAt) {
-      pushCloud(); // our local copy is newer — push it up
+      pushCloud(who); // our local copy is newer — push it up
     }
   }
 
-  function adoptRemote(remote) {
-    const incoming = remote.data;
-    const keepView = state.view;
-    const keepReport = state._reportId;
-    state = Object.assign(defaultState(), incoming);
-    state.view = keepView; // don't yank the other person's tab around
-    if (keepReport) state._reportId = keepReport;
-    state.updatedAt = remote.updatedAt;
-    persistLocal();
-    render();
+  function adoptRemote(who, remote) {
+    const prev = wsState[who];
+    const merged = Object.assign(defaultState(), remote.data);
+    merged.view = prev.view; // don't yank the tab around
+    if (prev._reportId) merged._reportId = prev._reportId;
+    if (prev._resultsMonth) merged._resultsMonth = prev._resultsMonth;
+    merged.updatedAt = remote.updatedAt;
+    wsState[who] = merged;
+    if (who === active) state = merged;
+    persistLocal(who);
+    if (who === active) render();
     if (remote.updatedBy && remote.updatedBy !== currentEmail()) {
-      showToast("☁️ Budget updated from the cloud");
+      showToast("☁️ " + WORKSPACES[who].name + "'s budget updated from the cloud");
     }
   }
 
-  function pushCloud() {
+  function pushCloud(who) {
+    who = who || active;
     if (!cloudUser) return;
-    if (!state.updatedAt) state.updatedAt = Date.now();
-    const data = JSON.parse(JSON.stringify(state));
+    const st = wsState[who];
+    if (!st.updatedAt) st.updatedAt = Date.now();
+    const data = JSON.parse(JSON.stringify(st));
     delete data.view; // per-device UI, not shared
     delete data._reportId;
     delete data._resultsMonth;
-    Cloud.saveBudget(BUDGET_KEY, {
+    Cloud.saveBudget(who, {
       data: data,
-      updatedAt: state.updatedAt,
+      updatedAt: st.updatedAt,
       updatedBy: currentEmail() || "",
     });
-    Cloud.saveResults(BUDGET_KEY, computeResults());
+    Cloud.saveResults(who, computeResultsFor(st, WORKSPACES[who].name));
   }
 
-  function schedulePush() {
+  function schedulePush(who) {
+    who = who || active;
     if (!cloudUser) return;
-    clearTimeout(pushTimer);
-    pushTimer = setTimeout(pushCloud, 700);
+    clearTimeout(wsPushTimer[who]);
+    wsPushTimer[who] = setTimeout(() => pushCloud(who), 700);
+  }
+
+  // The "My budget / Kelly's budget" switcher (owner only, when signed in).
+  function updateWsSwitcher() {
+    const el = document.getElementById("ws-switch");
+    if (!el) return;
+    if (!cloudUser) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML =
+      `<button type="button" class="ws-btn ${active === "derek" ? "active" : ""}" data-ws="derek">🐵 My budget</button>` +
+      `<button type="button" class="ws-btn ${active === "kelly" ? "active" : ""}" data-ws="kelly">🐶 Kelly's budget</button>`;
   }
 
   function friendlyAuthError(e) {
@@ -1967,6 +2019,13 @@
 
   const settingsBtn = document.getElementById("settings-btn");
   if (settingsBtn) settingsBtn.addEventListener("click", openSettings);
+
+  const wsSwitchEl = document.getElementById("ws-switch");
+  if (wsSwitchEl)
+    wsSwitchEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-ws]");
+      if (btn) setActive(btn.dataset.ws);
+    });
 
   /* Boot */
   render();
