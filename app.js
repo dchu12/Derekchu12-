@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "54";
+  const APP_VERSION = "55";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -624,6 +624,10 @@
 
     const period = activePeriod();
 
+    // Header "Log spend" is available whenever there's an active period, on any tab.
+    const headerLog = document.getElementById("header-log");
+    if (headerLog) headerLog.hidden = !period;
+
     // History, Report, and Results stay reachable even between paychecks (no active period).
     if (state.view === "history") return renderHistory();
     if (state.view === "report") return renderReport();
@@ -847,6 +851,7 @@
     const saved = periodIncome(p) - budgeted;
     const dl = daysLeft(p);
     const coach = coachMessage(p);
+    const greetName = PERSON_NAME;
 
     const renderCat = (c) => {
       const cs = catSpent(p, c.id);
@@ -915,9 +920,12 @@
       ${dl === 0 ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>` : ""}
       ${safetyBanner}
       <div class="card hero">
-        <div class="label">Left to spend</div>
-        <div class="amount">${fmt(remaining)}</div>
-        <button type="button" class="days-pill" id="edit-dates" aria-label="Edit pay period dates" title="Edit pay period dates">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`}</button>
+        <div class="hero-greet">Hello ${esc(greetName)},</div>
+        <div class="hero-amount-row">
+          <span class="amount">${fmt(remaining)}</span>
+          <span class="amount-cap">left to spend</span>
+        </div>
+        <button type="button" class="days-pill" id="edit-dates" aria-label="Edit pay period dates" title="Edit pay period dates">${dl === 0 ? "Payday is today" : `${dl} ${dl === 1 ? "day" : "days"} remaining`}</button>
       </div>
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
@@ -925,10 +933,7 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Categories</h2>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-ghost btn-sm" id="manage-cats">Manage</button>
-            <button class="btn btn-primary btn-sm" id="quick-add">Log spend</button>
-          </div>
+          <button class="btn btn-ghost btn-sm" id="manage-cats">Manage</button>
         </div>
         ${cats}
       </div>
@@ -945,7 +950,6 @@
       <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">Got paid? Start a new pay period</button>
     `;
 
-    document.getElementById("quick-add").addEventListener("click", () => openSpendModal(p));
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     document.getElementById("add-income").addEventListener("click", () => openIncomeModal(p));
     document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
@@ -2491,6 +2495,13 @@
 
   const settingsBtn = document.getElementById("settings-btn");
   if (settingsBtn) settingsBtn.addEventListener("click", openSettings);
+
+  const headerLogBtn = document.getElementById("header-log");
+  if (headerLogBtn)
+    headerLogBtn.addEventListener("click", () => {
+      const p = activePeriod();
+      if (p) openSpendModal(p);
+    });
 
   /* Boot */
   render();
