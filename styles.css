@@ -51,7 +51,12 @@ body {
   box-shadow: 0 2px 6px rgba(28, 57, 187, 0.28);
 }
 .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-.brand h1.wordmark { font-size: 23px; font-weight: 800; letter-spacing: -0.03em; }
+.brand h1.wordmark {
+  font-size: 27px; font-weight: 800; letter-spacing: -0.035em; width: max-content;
+  background: linear-gradient(120deg, #2aa6c4 0%, #2b62cf 55%, #1c39bb 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
 
 .tabs {
   display: flex;
