@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "86";
+  const APP_VERSION = "87";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */

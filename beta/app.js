@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "86";
+  const APP_VERSION = "87";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
