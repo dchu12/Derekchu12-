@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "43";
+  const APP_VERSION = "44";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -96,6 +96,14 @@
         maximumFractionDigits: 2,
       });
     return v < 0 ? "-" + body : body;
+  };
+
+  // Compact money for tight spots like chart labels: $1.9k, $355, -$50.
+  const fmtCompact = (n) => {
+    const v = Number(n || 0);
+    const a = Math.abs(v);
+    const s = a >= 1000 ? "$" + (a / 1000).toFixed(a >= 10000 ? 0 : 1) + "k" : "$" + Math.round(a);
+    return (v < 0 ? "-" : "") + s;
   };
 
   const fmtShort = (n) => {
@@ -413,14 +421,14 @@
           </div>
           <button type="button" class="rm" data-rm="${esc(id)}" title="Remove ${esc(label)}" aria-label="Remove ${esc(label)}">×</button>
         </div>
-        <label class="fixed-toggle">
-          <input type="checkbox" data-f="fixed" ${r.fixed ? "checked" : ""} />
-          📌 Fixed bill — auto-logged each payday
-        </label>
-        <label class="fixed-toggle">
-          <input type="checkbox" data-f="rollover" ${r.rollover ? "checked" : ""} />
-          🔄 Roll leftover into next period
-        </label>
+        <div class="cat-opts">
+          <label class="opt-toggle" title="Auto-logged as spent each payday">
+            <input type="checkbox" data-f="fixed" ${r.fixed ? "checked" : ""} /> 📌 Fixed bill
+          </label>
+          <label class="opt-toggle" title="Carry any leftover into next period">
+            <input type="checkbox" data-f="rollover" ${r.rollover ? "checked" : ""} /> 🔄 Rollover
+          </label>
+        </div>
         ${note}
       </div>`;
   }
@@ -927,12 +935,12 @@
         <div class="stat-grid">
           <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
           <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
-          <div class="sstat"><div class="sk">${saved >= 0 ? "Saved" : "Over"}</div><div class="sv ${saved < 0 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
+          <div class="sstat"><div class="sk">${saved >= 0 ? "Unbudgeted" : "Over-budget"}</div><div class="sv ${saved < 0 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
         </div>
       </div>
 
       <button class="btn btn-ghost btn-block" id="add-income">➕ Add extra income</button>
-      <button class="btn btn-ghost btn-block" id="new-payday" style="margin-top:10px;">💵 Got paid? Start a new pay period</button>
+      <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">💵 Got paid? Start a new pay period</button>
     `;
 
     document.getElementById("quick-add").addEventListener("click", () => openSpendModal(p));
@@ -1501,7 +1509,7 @@
       .map((p, i) => {
         const v = svals[i];
         const h = Math.max(4, Math.round((Math.abs(v) / smax) * 100));
-        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${v < 0 ? "neg" : ""}" style="height:${h}%" title="${fmt(v)}"></div></div><div class="sc-x">${esc(fmtDateShort(p.startDate))}</div></div>`;
+        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${v < 0 ? "neg" : ""}" style="height:${h}%" title="${fmt(v)}"></div></div><div class="sc-x">${esc(fmtDateShort(p.startDate))}</div><div class="sc-v">${esc(fmtCompact(v))}</div></div>`;
       })
       .join("")}</div>`;
 
@@ -1916,7 +1924,7 @@
       pad("Budgeted", fmt(budgeted)),
       pad("Spent", fmt(spent)),
       pad(active ? "Remaining" : "Left over", `${fmt(active ? remaining : saved)}  ${status}`),
-      pad(unbudgeted >= 0 ? "Saved" : "Over-budget", fmt(Math.abs(unbudgeted))),
+      pad(unbudgeted >= 0 ? "Unbudgeted" : "Over-budget", fmt(Math.abs(unbudgeted))),
       "",
       "By category (most spent first):",
       catLines || "  (no spending yet)",

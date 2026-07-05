@@ -152,7 +152,7 @@ body {
 @keyframes barGrow { from { width: 0; } }
 @media (prefers-reduced-motion: reduce) { .bar-fill { animation: none; } }
 .bar-fill.ok { background: var(--accent-2); }
-.bar-fill.warn { background: #00a86b; } /* jade green (Kelly's pick) */
+.bar-fill.warn { background: var(--warn); } /* amber — near-limit caution */
 .bar-fill.over { background: var(--danger); }
 
 /* Coach — friendly encouragement banner */
@@ -360,6 +360,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .sc-bar { width: 68%; max-width: 40px; margin: 0 auto; background: var(--good); border-radius: 6px 6px 0 0; transition: height 0.5s ease; }
 .sc-bar.neg { background: var(--danger); }
 .sc-x { text-align: center; font-size: 10px; color: var(--text-dim); margin-top: 6px; white-space: nowrap; }
+.sc-v { text-align: center; font-size: 10px; font-weight: 700; color: var(--text); margin-top: 2px; white-space: nowrap; }
+/* "Got paid? Start a new pay period" — distinct outlined-accent look */
+.btn-payday { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 700; }
+.btn-payday:active { background: var(--accent-soft); }
 
 /* Overspend patterns */
 .ov-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
@@ -441,6 +445,9 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   cursor: pointer;
 }
 .fixed-toggle input { width: auto; margin: 0; accent-color: var(--accent); }
+.cat-opts { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 2px 2px 2px 60px; margin-top: 2px; }
+.opt-toggle { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
+.opt-toggle input { width: auto; margin: 0; accent-color: var(--accent); }
 
 /* Bigger, accessible tap targets for icon buttons */
 .rm { min-width: 40px; min-height: 40px; }
