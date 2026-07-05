@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "61";
+  const APP_VERSION = "62";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -2453,8 +2453,8 @@
     }
     el.hidden = false;
     el.innerHTML =
-      `<button type="button" class="ws-btn ${active === "derek" ? "active" : ""}" data-ws="derek">🐵 My budget</button>` +
-      `<button type="button" class="ws-btn ${active === "kelly" ? "active" : ""}" data-ws="kelly">🐶 Kelly's budget</button>`;
+      `<button type="button" class="ws-btn ${active === "derek" ? "active" : ""}" data-ws="derek">${esc(WORKSPACES.derek.name)}</button>` +
+      `<button type="button" class="ws-btn ${active === "kelly" ? "active" : ""}" data-ws="kelly">${esc(WORKSPACES.kelly.name)}</button>`;
   }
 
   function friendlyAuthError(e) {
