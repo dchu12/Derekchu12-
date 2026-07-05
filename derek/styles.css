@@ -40,7 +40,14 @@ body {
   padding: 18px 0 10px;
 }
 .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.brand .logo { font-size: 28px; }
+.brand .logo {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; flex: 0 0 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #0f9a52 0%, #4aa63f 55%, #12874c 100%);
+  color: #fff; font-size: 20px; font-weight: 800; letter-spacing: -0.01em;
+  box-shadow: 0 2px 6px rgba(18, 135, 76, 0.28);
+}
 .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 
 .tabs {
