@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "64";
+  const APP_VERSION = "65";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -853,7 +853,7 @@
     const coach = coachMessage(p);
     // Budget-used ring for the hero card.
     const pctSpent = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
-    const ringC = 2 * Math.PI * 36;
+    const ringC = 2 * Math.PI * 43;
     const ringDash = (Math.min(100, Math.max(0, pctSpent)) / 100) * ringC;
 
     const renderCat = (c) => {
@@ -929,9 +929,9 @@
           <button type="button" class="hero-days" id="edit-dates" aria-label="Edit pay period dates" title="Edit pay period dates">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`}</button>
         </div>
         <div class="hero-ring" role="img" aria-label="${pctSpent}% of budget spent">
-          <svg width="84" height="84" viewBox="0 0 84 84">
-            <circle cx="42" cy="42" r="36" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="8"/>
-            <circle cx="42" cy="42" r="36" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-dasharray="${ringC.toFixed(1)}" stroke-dashoffset="${(ringC - ringDash).toFixed(1)}" transform="rotate(-90 42 42)"/>
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="43" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="9"/>
+            <circle cx="50" cy="50" r="43" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-dasharray="${ringC.toFixed(1)}" stroke-dashoffset="${(ringC - ringDash).toFixed(1)}" transform="rotate(-90 50 50)"/>
           </svg>
           <div class="hero-ring-label"><span class="hrl-pct">${pctSpent}%</span><span class="hrl-cap">spent</span></div>
         </div>
