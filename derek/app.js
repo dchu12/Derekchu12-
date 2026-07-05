@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "76";
+  const APP_VERSION = "77";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -904,10 +904,16 @@
     let cats;
     if (fixedCats.length) {
       cats =
-        `<button type="button" class="section-toggle" id="fixed-toggle" aria-expanded="${!fixedCollapsed}">
-           <span class="section-label" style="margin:0;">Fixed bills</span>
-           <span class="section-meta">${fixedCats.length} · ${fmt(fixedBudgeted)}</span>
-           <span class="section-caret ${fixedCollapsed ? "collapsed" : ""}" aria-hidden="true">▾</span>
+        `<button type="button" class="fixed-toggle ${fixedCollapsed ? "collapsed" : ""}" id="fixed-toggle" aria-expanded="${!fixedCollapsed}">
+           <span class="ft-left">
+             <span class="ft-icon" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2.5"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg></span>
+             <span class="ft-title">Fixed bills</span>
+             <span class="ft-count">${fixedCats.length}</span>
+           </span>
+           <span class="ft-right">
+             <span class="ft-amt">${fmt(fixedBudgeted)}</span>
+             <span class="ft-caret" aria-hidden="true">›</span>
+           </span>
          </button>` +
         (fixedCollapsed ? "" : fixedCats.map(renderCat).join(""));
       if (spendCats.length) {
@@ -964,7 +970,7 @@
         <div class="stat-grid">
           <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
           <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
-          <div class="sstat"><div class="sk">${saved >= 0 ? "Saved" : "Over budget"}</div><div class="sv ${saved < 0 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
+          <div class="sstat"><div class="sk">${saved >= 0 ? "Saved" : "Over budget"}</div><div class="sv ${saved > 0.005 ? "pos" : saved < -0.005 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
         </div>
       </div>
 
