@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "72";
+  const APP_VERSION = "73";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1262,7 +1262,10 @@
       })
       .join("");
     const donutLegend = segs
-      .map((s) => `<div class="dn-row"><span class="dn-dot" style="background:${s.color}"></span><span class="dn-name">${esc(s.label)}</span><span class="dn-amt">${fmt(s.amt)}</span></div>`)
+      .map((s) => {
+        const segPct = discTotal > 0 ? Math.round((s.amt / discTotal) * 100) : 0;
+        return `<div class="dn-row"><span class="dn-dot" style="background:${s.color}"></span><span class="dn-name">${esc(s.label)}</span><span class="dn-amt">${fmt(s.amt)}</span><span class="dn-pct">${segPct}%</span></div>`;
+      })
       .join("");
 
     // Optional filter by category (tap a chip). Transient, per-device.
