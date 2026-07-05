@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "32";
+  const APP_VERSION = "33";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1071,8 +1071,28 @@
 
     const catById = Object.fromEntries(p.categories.map((c) => [c.id, c]));
 
-    const list = txns.length
-      ? txns
+    // Optional filter by category (tap a chip). Transient, per-device.
+    const usedCatIds = [...new Set(txns.map((t) => t.categoryId))];
+    let activeFilter = state._spendFilter || "all";
+    if (activeFilter !== "all" && !usedCatIds.includes(activeFilter)) activeFilter = "all";
+    const filtered = activeFilter === "all" ? txns : txns.filter((t) => t.categoryId === activeFilter);
+    const filteredTotal = filtered.reduce((s, t) => s + Number(t.amount), 0);
+
+    const filterRow = txns.length
+      ? `<div class="chips spend-filter" id="spend-filter" role="group" aria-label="Filter by category">
+           <button type="button" class="chip ${activeFilter === "all" ? "active" : ""}" data-f="all">All</button>
+           ${p.categories
+             .filter((c) => usedCatIds.includes(c.id))
+             .map(
+               (c) =>
+                 `<button type="button" class="chip ${activeFilter === c.id ? "active" : ""}" data-f="${c.id}">${esc(c.emoji)} ${esc(c.name)}</button>`
+             )
+             .join("")}
+         </div>`
+      : "";
+
+    const list = filtered.length
+      ? filtered
           .map((t) => {
             const c = catById[t.categoryId] || { emoji: "❓", name: "Uncategorized" };
             return `
@@ -1091,18 +1111,33 @@
           </div>`;
           })
           .join("")
-      : `<div class="empty"><div class="big">🧾</div><p>No spending logged yet this period.</p></div>`;
+      : `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" ? "No spending logged yet this period." : "No spending in this category yet."}</p></div>`;
+
+    const subline =
+      activeFilter === "all"
+        ? `${txns.length} ${txns.length === 1 ? "transaction" : "transactions"} · ${fmt(totalSpent(p))} total${txns.length ? " · tap one to edit" : ""}`
+        : `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"} · ${fmt(filteredTotal)} in ${esc((catById[activeFilter] || {}).name || "category")}`;
 
     main.innerHTML = `
       <button class="btn btn-primary btn-block" id="add-spend" style="margin-bottom:14px;">+ Log spending</button>
       <div class="card">
         <h2>This period's spending</h2>
-        <p class="sub">${txns.length} ${txns.length === 1 ? "transaction" : "transactions"} · ${fmt(totalSpent(p))} total${txns.length ? " · tap one to edit" : ""}</p>
+        <p class="sub">${subline}</p>
+        ${filterRow}
         ${list}
       </div>
     `;
 
     document.getElementById("add-spend").addEventListener("click", () => openSpendModal(p));
+
+    const filterEl = document.getElementById("spend-filter");
+    if (filterEl)
+      filterEl.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-f]");
+        if (!b) return;
+        state._spendFilter = b.dataset.f;
+        render();
+      });
 
     main.querySelectorAll("[data-edit]").forEach((btn) =>
       btn.addEventListener("click", () => {
@@ -1996,6 +2031,7 @@
     delete data.view; // per-device UI, not shared
     delete data._reportId;
     delete data._resultsMonth;
+    delete data._spendFilter;
     Cloud.saveBudget(who, {
       data: data,
       updatedAt: st.updatedAt,

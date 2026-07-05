@@ -479,6 +479,10 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .rs-combined { display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); border-radius: 10px; padding: 11px 12px; font-size: 13.5px; font-weight: 600; }
 .rs-combined b { font-size: 15px; }
 .rs-month-tag { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+
+/* Spend-tab category filter chips */
+.spend-filter { flex-wrap: nowrap; overflow-x: auto; gap: 6px; margin: 2px 0 12px; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.spend-filter .chip { flex: 0 0 auto; }
 .input-invalid { border-color: var(--danger) !important; outline-color: var(--danger) !important; }
 
 /* Over-budget alert */
