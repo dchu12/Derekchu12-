@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "77";
+  const APP_VERSION = "78";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -311,14 +311,18 @@
 
   /* Pick a fresh on-track line each time (each open/action), avoiding an
    * immediate repeat so it always feels new. */
-  let _lastCoachIdx = -1;
+  let _recentCoach = [];
   function rotateLine(lines) {
     if (!lines.length) return "";
     if (lines.length === 1) return lines[0];
-    let idx = Math.floor(Math.random() * lines.length);
-    if (idx === _lastCoachIdx) idx = (idx + 1) % lines.length;
-    _lastCoachIdx = idx;
-    return lines[idx];
+    // Avoid the last several quotes (tracked by text) so they don't repeat soon.
+    const keep = Math.min(lines.length - 1, 10);
+    const pool = lines.filter((l) => !_recentCoach.includes(l));
+    const choices = pool.length ? pool : lines;
+    const pick = choices[Math.floor(Math.random() * choices.length)];
+    _recentCoach.push(pick);
+    while (_recentCoach.length > keep) _recentCoach.shift();
+    return pick;
   }
 
   /* A friendly coach line for the dashboard, based on how the period's going. */
@@ -352,16 +356,55 @@
     // On track — mix warm encouragement with wisdom from The Psychology of Money
     // and The Art of Spending Money (both by Morgan Housel).
     const lines = [
+      // Warm, on-track encouragements
       "💙 You're right on track — lovely work. Keep it up!",
       "🌊 Looking good — plenty of comfortable room left this period.",
+      "🎯 Bang on budget. This is exactly what winning looks like.",
+      "🍃 Calm and steady — your budget's breathing easy this period.",
+      "⛵ Smooth sailing. You're gliding through this one with room to spare.",
+      "🌿 Nothing to fix here. You're quietly nailing it.",
+      "🧊 Cool, calm, and under budget. Love to see it.",
+      "🌤️ Clear skies on the budget — keep doing what you're doing.",
+      "💪 Steady hands, steady budget. You've got this handled.",
+      "🎈 Light and breezy — you've left yourself lots of wiggle room.",
+      "🌟 Every mindful choice this period is adding up. Nicely done.",
+      "🧘 Budget's in a good place. Breathe easy and carry on.",
+      "🚀 On pace and in control — future-you is going to be thankful.",
+      "🌻 Growing your savings one calm decision at a time. Beautiful.",
+      "🏆 Give yourself a nod — you're spending with real intention.",
+      "🪷 Unbothered budget, moisturized savings. Thriving.",
+      "🔥 You're on a roll — same energy for the rest of the period.",
+      "🍀 Right where you want to be. Keep the momentum going.",
+      // General money wisdom
+      "🌱 A budget isn't about spending less — it's about spending on what matters. You're doing that.",
+      "💡 Small, boring, consistent choices are what quietly build wealth. Keep going.",
+      "🧭 Every dollar you give a job is a dollar that stops wandering off. Nice work.",
+      "⏳ Patience with money is a quiet superpower — and you're flexing it right now.",
+      "🪴 Wealth grows in the quiet: no drama, just steady saving. That's you this period.",
+      "🔑 Freedom is just savings you haven't spent yet — and you're building some.",
+      "📈 Slow money is steady money. You're playing the long game well.",
+      "🕰️ The best time to save was last payday; the second best is this one — and you're on it.",
+      "🧩 Budgeting is choosing your regrets in advance — and you're choosing wisely.",
+      "🌙 Money you don't spend tonight becomes options tomorrow. You're stacking options.",
+      "⚖️ Spend on today, save for tomorrow — you've found the balance this period.",
+      "🌰 Big oaks come from steadily planted acorns. Keep planting.",
+      // The Psychology of Money (Morgan Housel)
       "✨ “Saving is the gap between your ego and your income.” You're minding that gap beautifully. — The Psychology of Money",
       "💰 “Wealth is what you don't see.” Every dollar you don't spend is quietly becoming your freedom. — The Psychology of Money",
       "🕊️ “Controlling your time is the highest dividend money pays.” Staying on budget buys more of it. — The Psychology of Money",
       "🌱 “Building wealth has little to do with your income and a lot to do with your savings rate.” You're doing the part that matters. — The Psychology of Money",
       "☕ “Spending money to show people how much money you have is the fastest way to have less.” Nice and steady wins. — The Psychology of Money",
+      "🎩 “The ability to do what you want, when you want, is priceless.” Your budget is buying that. — The Psychology of Money",
+      "🛡️ “Room for error is what lets you endure.” You're leaving yourself some — smart. — The Psychology of Money",
+      "😌 “Enough” is knowing when to stop moving the goalposts. You seem to know yours. — The Psychology of Money",
+      "🌰 Compounding rewards patience, not intensity. You're giving it time. — The Psychology of Money",
+      // The Art of Spending Money (Morgan Housel)
       "🛍️ “Spending money is easy. Spending it well is a skill.” And you're getting good at it. — The Art of Spending Money",
       "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you love. — The Art of Spending Money",
       "🧭 “The whole point of money is to give you independence and freedom.” Every mindful choice buys a little more. — The Art of Spending Money",
+      "🎁 The best purchases buy better days, not just nicer things. You're spending with intention. — The Art of Spending Money",
+      "🍷 Spending well means matching money to what you actually value. You're aligned this period. — The Art of Spending Money",
+      "🌅 Money's real job is to improve how you feel about your days. Looks like it's doing its job. — The Art of Spending Money",
     ];
     // Celebrate any savings/goal category she's fully funded this period.
     const funded = p.categories.filter(
@@ -2245,7 +2288,6 @@
     main.innerHTML = `
       <div class="card">
         <h2>Shared results</h2>
-        <p class="sub">You and ${esc(PARTNER_NAME)}'s latest results. Each card is labelled with the month it's showing.</p>
         <div class="field" style="margin-bottom:10px;">
           <select id="rs-month">
             ${months.map((mk) => `<option value="${mk}" ${mk === sel ? "selected" : ""}>${monthLabel(mk)}</option>`).join("")}
