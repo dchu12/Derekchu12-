@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "34";
+  const APP_VERSION = "35";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -137,6 +137,15 @@
   // Total income for a period: the paycheck plus any extra income logged.
   const periodIncome = (p) =>
     Number(p.paycheckAmount || 0) + (p.extraIncome || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+
+  // Short label for the current pay period's date range, e.g. "Jul 1 – Jul 14".
+  const fmtShortDate = (d) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  function periodRangeLabel(p) {
+    const s = parseDate(p.startDate);
+    const last = periodEnd(p); // next paycheck date
+    last.setDate(last.getDate() - 1); // inclusive last day of this period
+    return `${fmtShortDate(s)} – ${fmtShortDate(last)}`;
+  }
 
   // Month-by-month summary for the shared Results view (published to Firestore).
   function computeResults() {
@@ -1113,9 +1122,9 @@
         : `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"} · ${fmt(filteredTotal)} in ${esc((catById[activeFilter] || {}).name || "category")}`;
 
     main.innerHTML = `
-      <button class="btn btn-primary btn-block" id="add-spend" style="margin-bottom:14px;">+ Log spending</button>
+      <button class="btn btn-primary btn-block" id="add-spend" style="margin-bottom:14px;">Log spending</button>
       <div class="card">
-        <h2>This period's spending</h2>
+        <h2>${esc(periodRangeLabel(p))} spending</h2>
         <p class="sub">${subline}</p>
         ${filterRow}
         ${list}
