@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "102";
+  const APP_VERSION = "103";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1304,14 +1304,6 @@
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
 
-      <button type="button" class="card income-card" id="income-manage" aria-label="Manage income">
-        <span class="ic-left">
-          <span class="ic-k">${isVac ? "Vacation fund + top-ups" : "Income this period"}</span>
-          <span class="ic-v">${fmt(periodIncome(p))}</span>
-        </span>
-        <span class="ic-caret" aria-hidden="true">›</span>
-      </button>
-
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Expense Categories</h2>
@@ -1319,6 +1311,14 @@
         </div>
         ${cats}
       </div>
+
+      <button type="button" class="card income-card" id="income-manage" aria-label="Manage income">
+        <span class="ic-left">
+          <span class="ic-k">${isVac ? "Vacation fund + top-ups" : "Income this period"}</span>
+          <span class="ic-v">${fmt(periodIncome(p))}</span>
+        </span>
+        <span class="ic-caret" aria-hidden="true">›</span>
+      </button>
 
       <div class="card stat-card">
         <div class="stat-grid">
