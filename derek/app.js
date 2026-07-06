@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "88";
+  const APP_VERSION = "89";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -22,12 +22,27 @@
    * State
    * ------------------------------------------------------------------ */
   const defaultState = () => ({
-    periods: [],          // list of pay periods, newest last
+    periods: [],          // list of budgets, newest last (kind: "payday" | "vacation")
     template: null,       // remembered category layout for the next payday
+    vacationTemplate: null, // remembered category layout for the next vacation
     goals: [],            // savings goals/jars: { id, emoji, name, target, saved }
     fixedCollapsed: false, // whether the Fixed bills section is collapsed
+    vacationMode: false,  // when on, a vacation budget can run alongside the pay period
+    activeBudget: "payday", // which budget the top switcher is showing: "payday" | "vacation"
     view: "dashboard",
   });
+
+  /* Default categories offered when planning a vacation budget. */
+  const VACATION_CATEGORIES = [
+    { emoji: "✈️", name: "Flights", budgeted: "", fixed: true },
+    { emoji: "🏨", name: "Lodging", budgeted: "", fixed: true },
+    { emoji: "🍽️", name: "Food & Dining", budgeted: "" },
+    { emoji: "🎟️", name: "Activities", budgeted: "" },
+    { emoji: "🚕", name: "Local Transport", budgeted: "" },
+    { emoji: "🛍️", name: "Shopping", budgeted: "" },
+    { emoji: "🎁", name: "Souvenirs", budgeted: "" },
+    { emoji: "📦", name: "Miscellaneous", budgeted: "" },
+  ];
 
   // Migrate older shapes forward (single `goal` → `goals` array).
   function migrateState(s) {
@@ -149,11 +164,20 @@
   }
 
   function periodEnd(period) {
+    // Vacation budgets carry an explicit (inclusive) end date; return the
+    // exclusive day-after so daysLeft / range labels line up with pay periods.
+    if (period.endDate) {
+      const end = parseDate(period.endDate);
+      end.setDate(end.getDate() + 1);
+      return end;
+    }
     const start = parseDate(period.startDate);
     const end = new Date(start);
     end.setDate(end.getDate() + frequencyDays(period.frequency));
     return end;
   }
+
+  const periodKind = (p) => (p && p.kind === "vacation" ? "vacation" : "payday");
 
   function daysLeft(period) {
     const end = periodEnd(period);
@@ -163,10 +187,21 @@
     return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
   }
 
-  function activePeriod() {
-    const p = state.periods[state.periods.length - 1];
-    return p && !p.closed ? p : null;
+  // Most recent open (non-closed) budget of a given kind, or null.
+  function activePeriodOf(kind) {
+    for (let i = state.periods.length - 1; i >= 0; i--) {
+      const p = state.periods[i];
+      if (!p.closed && periodKind(p) === kind) return p;
+    }
+    return null;
   }
+  // The budget currently shown by the top switcher (defaults to the pay period).
+  function activePeriod() {
+    const which = state.activeBudget === "vacation" ? "vacation" : "payday";
+    return activePeriodOf(which);
+  }
+  const activeVacation = () => activePeriodOf("vacation");
+  const activePayday = () => activePeriodOf("payday");
 
   function catSpent(period, catId) {
     return period.transactions
@@ -675,15 +710,20 @@
   function render() {
     // "History" and "Report" are now one combined "Reports" tab.
     if (state.view === "history") state.view = "report";
+    // Vacation Mode off → the switcher is hidden, so never sit on the vacation view.
+    if (!state.vacationMode && state.activeBudget === "vacation") state.activeBudget = "payday";
 
     // Sync tab highlight
     document.querySelectorAll(".tab").forEach((t) =>
       t.classList.toggle("active", t.dataset.view === state.view)
     );
 
-    const period = activePeriod();
+    renderBudgetSwitch();
 
-    // Header "Log spend" is available whenever there's an active period, on any tab.
+    const period = activePeriod();
+    const onVacation = state.activeBudget === "vacation";
+
+    // Header "Log spend" is available whenever the selected budget has an active period.
     const headerLog = document.getElementById("header-log");
     if (headerLog) headerLog.hidden = !period;
     const headerAdd = document.getElementById("header-add");
@@ -694,13 +734,31 @@
     if (state.view === "results") return renderResults();
 
     if (!period) {
-      // No active budget — force setup for the budgeting tabs.
-      renderSetup();
+      // No active budget for the selected type — show the matching setup flow.
+      if (onVacation) renderVacationSetup();
+      else renderSetup();
       return;
     }
 
     if (state.view === "dashboard") renderDashboard(period);
     else if (state.view === "spend") renderSpend(period);
+  }
+
+  // Top switcher between the pay-period budget and the vacation budget.
+  // Only shown when Vacation Mode is on.
+  function renderBudgetSwitch() {
+    const el = document.getElementById("budget-switch");
+    if (!el) return;
+    if (!state.vacationMode) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    el.hidden = false;
+    const which = state.activeBudget === "vacation" ? "vacation" : "payday";
+    el.innerHTML =
+      `<button type="button" class="bud-btn ${which === "payday" ? "active" : ""}" data-bud="payday">💼 Pay Period</button>` +
+      `<button type="button" class="bud-btn ${which === "vacation" ? "active" : ""}" data-bud="vacation">🏖️ Vacation</button>`;
   }
 
   /* ---------- Setup / new payday flow ---------- */
@@ -903,8 +961,168 @@
     drawRows();
   }
 
+  /* ---------- Vacation budget setup (runs alongside the pay period) ---------- */
+  function renderVacationSetup() {
+    const template = state.vacationTemplate || { categories: VACATION_CATEGORIES };
+    const todayIso = todayISO();
+    const weekOut = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return dateToISO(d); })();
+
+    main.innerHTML = `
+      <div class="card">
+        <h2>Plan your vacation 🏖️</h2>
+        <p class="sub">Set a total for the trip and the dates you'll be away. This budget runs alongside your regular pay period — the two are tracked separately.</p>
+
+        <div class="field money-input">
+          <label>Total vacation budget</label>
+          <input id="vac-total" type="number" inputmode="decimal" placeholder="0.00" step="0.01" />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Start date</label>
+            <input id="vac-start" type="date" value="${todayIso}" />
+          </div>
+          <div class="field">
+            <label>End date</label>
+            <input id="vac-end" type="date" value="${weekOut}" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Split it into a budget</h2>
+        <p class="sub">Plan what you'll spend while away — whatever's left over comes home with you.</p>
+        <div id="alloc-list"></div>
+        <button class="btn btn-ghost btn-sm" id="add-cat">+ Add category</button>
+
+        <div class="alloc-summary">
+          <span>Budget <b id="sum-paycheck">$0.00</b></span>
+          <span>Unallocated <b class="remaining" id="sum-remaining">$0.00</b></span>
+        </div>
+
+        <button class="btn btn-primary btn-block" id="start-vacation">Start vacation budget</button>
+      </div>
+
+      <p class="footer-note">You can switch back to your pay period anytime using the toggle up top.</p>
+    `;
+
+    let rows = template.categories.map((c) => ({
+      id: uid(),
+      emoji: c.emoji || "💵",
+      name: c.name || "",
+      budgeted: c.budgeted != null ? String(c.budgeted) : "",
+      fixed: !!c.fixed,
+      rollover: false,
+    }));
+
+    const listEl = document.getElementById("alloc-list");
+    const totalEl = document.getElementById("vac-total");
+
+    function drawRows() {
+      listEl.innerHTML = rows.map((r) => catEditRow(r, r.id, { drag: true })).join("");
+      updateSummary();
+    }
+    enableRowDrag(listEl, (order) => {
+      rows.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    });
+    function updateSummary() {
+      const total = Number(totalEl.value) || 0;
+      const allocated = rows.reduce((s, r) => s + (Number(r.budgeted) || 0), 0);
+      const remaining = total - allocated;
+      document.getElementById("sum-paycheck").textContent = fmt(total);
+      const remEl = document.getElementById("sum-remaining");
+      remEl.textContent = fmt(remaining);
+      remEl.className = "remaining " + (remaining < -0.005 ? "neg" : remaining > 0.005 ? "pos" : "");
+    }
+    listEl.addEventListener("input", (e) => {
+      const item = e.target.closest(".cat-edit-row");
+      if (!item) return;
+      const row = rows.find((r) => r.id === item.dataset.row);
+      if (!row) return;
+      const f = e.target.dataset.f;
+      row[f] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+      if (f === "budgeted") updateSummary();
+    });
+    listEl.addEventListener("click", (e) => {
+      const rm = e.target.dataset.rm;
+      if (!rm) return;
+      rows = rows.filter((r) => r.id !== rm);
+      drawRows();
+    });
+    document.getElementById("add-cat").addEventListener("click", () => {
+      rows.push({ id: uid(), emoji: "💵", name: "", budgeted: "", fixed: false });
+      drawRows();
+      const last = listEl.querySelector(".cat-edit-row:last-child .name-in");
+      if (last) last.focus();
+    });
+    totalEl.addEventListener("input", updateSummary);
+
+    document.getElementById("start-vacation").addEventListener("click", () => {
+      const total = Number(totalEl.value);
+      if (!total || total <= 0) {
+        showFieldError(totalEl, "Enter a total for your vacation budget.");
+        return;
+      }
+      const startDate = document.getElementById("vac-start").value || todayIso;
+      const endDate = document.getElementById("vac-end").value || startDate;
+      if (parseDate(endDate) < parseDate(startDate)) {
+        showToast("End date can't be before the start date.");
+        return;
+      }
+      const cats = rows
+        .filter((r) => r.name.trim() && Number(r.budgeted) > 0)
+        .map((r) => ({
+          id: uid(),
+          emoji: r.emoji.trim() || "💵",
+          name: r.name.trim(),
+          budgeted: Number(r.budgeted),
+          fixed: !!r.fixed,
+        }));
+      if (cats.length === 0) {
+        showToast("Add at least one category with an amount.");
+        return;
+      }
+      const period = {
+        id: uid(),
+        kind: "vacation",
+        paycheckAmount: total,
+        startDate,
+        endDate,
+        frequency: "custom",
+        categories: cats,
+        transactions: [],
+        closed: false,
+        createdAt: new Date().toISOString(),
+      };
+      cats.forEach((c) => {
+        if (c.fixed && c.budgeted > 0) {
+          period.transactions.push({
+            id: uid(),
+            categoryId: c.id,
+            amount: c.budgeted,
+            description: c.name,
+            date: startDate,
+            auto: true,
+            editedAt: Date.now(),
+          });
+        }
+      });
+      state.periods.push(period);
+      state.vacationTemplate = {
+        categories: cats.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed })),
+      };
+      state.activeBudget = "vacation";
+      state.view = "dashboard";
+      save();
+      render();
+    });
+
+    drawRows();
+  }
+
   /* ---------- Dashboard ---------- */
   function renderDashboard(p) {
+    const isVac = periodKind(p) === "vacation";
     const budgeted = totalBudgeted(p);
     const spent = totalSpent(p);
     const remaining = budgeted - spent;
@@ -986,13 +1204,19 @@
       : "";
 
     main.innerHTML = `
-      ${dl === 0 ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>` : ""}
+      ${dl === 0 ? (isVac
+          ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🏖️ Your vacation ended — close it out</button>`
+          : `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>`) : ""}
       ${safetyBanner}
       <div class="card hero">
         <div class="hero-main">
           <div class="hero-eyebrow">Left to spend</div>
           <div class="amount">${fmt(remaining)}</div>
-          <button type="button" class="hero-days" id="edit-dates" aria-label="Edit pay period dates" title="Edit pay period dates">${dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`}</button>
+          <button type="button" class="hero-days" id="edit-dates" aria-label="Edit dates" title="Edit dates">${
+            isVac
+              ? (dl === 0 ? "Vacation ended" : `${dl} ${dl === 1 ? "day" : "days"} left of vacation`)
+              : (dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`)
+          }</button>
         </div>
         <div class="hero-ring" role="img" aria-label="${pctSpent}% of budget spent">
           <svg width="100" height="100" viewBox="0 0 100 100">
@@ -1021,13 +1245,13 @@
         </div>
       </div>
 
-      <button class="btn btn-block btn-payday" id="add-income">Add extra income</button>
-      <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">Got paid? Start a new pay period</button>
+      <button class="btn btn-block btn-payday" id="add-income">${isVac ? "Add to vacation budget" : "Add extra income"}</button>
+      <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
     `;
 
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     document.getElementById("add-income").addEventListener("click", () => openIncomeModal(p));
-    document.getElementById("new-payday").addEventListener("click", () => confirmNewPayday(p));
+    document.getElementById("new-payday").addEventListener("click", () => (isVac ? confirmEndVacation(p) : confirmNewPayday(p)));
     const ed = document.getElementById("edit-dates");
     if (ed) ed.addEventListener("click", () => openPeriodDates(p));
     const ssi = document.getElementById("safety-signin");
@@ -1042,7 +1266,7 @@
         render();
       });
     const pe = document.getElementById("period-ended");
-    if (pe) pe.addEventListener("click", () => confirmNewPayday(p));
+    if (pe) pe.addEventListener("click", () => (isVac ? confirmEndVacation(p) : confirmNewPayday(p)));
     const ft = document.getElementById("fixed-toggle");
     if (ft)
       ft.addEventListener("click", () => {
@@ -1057,6 +1281,7 @@
 
   /* ---------- Edit the current pay period's dates ---------- */
   function openPeriodDates(p) {
+    if (periodKind(p) === "vacation") return openVacationDates(p);
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Edit pay period dates">
@@ -1117,15 +1342,82 @@
     });
   }
 
+  /* ---------- Edit the vacation budget's date range ---------- */
+  function openVacationDates(p) {
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Edit vacation dates">
+          <h2>Vacation dates</h2>
+          <p class="sub">Set when your trip starts and ends — this drives the days-left countdown.</p>
+          <div class="field-row">
+            <div class="field">
+              <label for="vd-start">Start date</label>
+              <input id="vd-start" type="date" value="${esc(p.startDate)}" />
+            </div>
+            <div class="field">
+              <label for="vd-end">End date</label>
+              <input id="vd-end" type="date" value="${esc(p.endDate || p.startDate)}" />
+            </div>
+          </div>
+          <div class="field-row" style="margin-top:14px;">
+            <button class="btn btn-ghost" id="vd-cancel" style="flex:1;">Cancel</button>
+            <button class="btn btn-primary" id="vd-save" style="flex:2;">Save</button>
+          </div>
+        </div>
+      </div>
+    `);
+    document.getElementById("vd-cancel").addEventListener("click", close);
+    document.getElementById("vd-save").addEventListener("click", () => {
+      const s = document.getElementById("vd-start").value;
+      const e = document.getElementById("vd-end").value;
+      if (!s || !e) { showToast("Pick both a start and end date."); return; }
+      if (parseDate(e) < parseDate(s)) { showToast("End date can't be before the start date."); return; }
+      p.startDate = s;
+      p.endDate = e;
+      save();
+      close();
+      render();
+      showToast("Vacation dates updated ✓");
+    });
+  }
+
+  /* ---------- End (close) the vacation budget ---------- */
+  function confirmEndVacation(p) {
+    const remaining = totalBudgeted(p) - totalSpent(p);
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="End vacation">
+          <h2>End this vacation? 🏖️</h2>
+          <p class="sub">This closes your vacation budget and saves it to history. You had
+            <b>${fmt(remaining)}</b> left across all categories. Your pay period isn't affected.</p>
+          <div class="field-row">
+            <button class="btn btn-ghost" id="ev-cancel" style="flex:1;">Not yet</button>
+            <button class="btn btn-primary" id="ev-go" style="flex:2;">Yes, end vacation</button>
+          </div>
+        </div>
+      </div>
+    `);
+    document.getElementById("ev-cancel").addEventListener("click", close);
+    document.getElementById("ev-go").addEventListener("click", () => {
+      p.closed = true;
+      p.closedAt = new Date().toISOString();
+      state.activeBudget = "payday";
+      save();
+      close();
+      render();
+    });
+  }
+
   /* ---------- Quick add sheet (header "+"): income or new pay period ---------- */
   function openQuickAdd(p) {
+    const isVac = periodKind(p) === "vacation";
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal quick-add" role="dialog" aria-modal="true" aria-label="Quick add">
           <h2>Quick add</h2>
-          <p class="sub">Add money to this period, or close it out and start fresh.</p>
-          <button class="btn btn-block btn-payday" id="qa-income">Add extra income</button>
-          <button class="btn btn-block btn-payday" id="qa-payday" style="margin-top:10px;">Got paid? Start a new pay period</button>
+          <p class="sub">${isVac ? "Top up your vacation budget, or end the trip." : "Add money to this period, or close it out and start fresh."}</p>
+          <button class="btn btn-block btn-payday" id="qa-income">${isVac ? "Add to vacation budget" : "Add extra income"}</button>
+          <button class="btn btn-block btn-payday" id="qa-payday" style="margin-top:10px;">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
           <button class="btn btn-ghost btn-block" id="qa-cancel" style="margin-top:10px;">Cancel</button>
         </div>
       </div>
@@ -1137,17 +1429,19 @@
     });
     document.getElementById("qa-payday").addEventListener("click", () => {
       close();
-      confirmNewPayday(p);
+      if (isVac) confirmEndVacation(p);
+      else confirmNewPayday(p);
     });
   }
 
   /* ---------- Add extra income to the current period ---------- */
   function openIncomeModal(p) {
+    const isVac = periodKind(p) === "vacation";
     const { close } = mountModal(`
       <div class="modal-overlay">
-        <div class="modal" role="dialog" aria-modal="true" aria-label="Add income">
-          <h2>Add extra income</h2>
-          <p class="sub">A bonus, refund, or second paycheck this period — it increases what you can save.</p>
+        <div class="modal" role="dialog" aria-modal="true" aria-label="${isVac ? "Add to vacation budget" : "Add income"}">
+          <h2>${isVac ? "Add to vacation budget" : "Add extra income"}</h2>
+          <p class="sub">${isVac ? "Extra cash for the trip — a gift, refund, or top-up. It increases what you can spend on vacation." : "A bonus, refund, or second paycheck this period — it increases what you can save."}</p>
           <div class="field money-input">
             <label for="inc-amount">Amount</label>
             <input id="inc-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01" />
@@ -2451,6 +2745,18 @@
           <div class="settings-stat">${periods} pay period${periods === 1 ? "" : "s"} · ${txns} transaction${txns === 1 ? "" : "s"} stored</div>
           ${cloudBlock}
 
+          <div class="vac-row">
+            <div class="vac-copy">
+              <div class="vac-title">🏖️ Vacation Mode</div>
+              <div class="vac-note">Run a separate vacation budget alongside your pay period.</div>
+            </div>
+            <label class="switch" title="Toggle Vacation Mode">
+              <input type="checkbox" id="set-vacation" ${state.vacationMode ? "checked" : ""} />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+          <div class="divider"></div>
+
           <button class="btn btn-primary btn-block" id="set-export">⬇️ Download backup</button>
           <p class="footer-note" style="margin:8px 0 16px;">${esc(lastBackupLabel())} · saves a <code>.json</code> file you can keep safe or move to another device.</p>
 
@@ -2478,6 +2784,16 @@
         Cloud.signOut();
         close();
         showToast("Signed out — syncing off");
+      });
+
+    const vacToggle = document.getElementById("set-vacation");
+    if (vacToggle)
+      vacToggle.addEventListener("change", () => {
+        state.vacationMode = vacToggle.checked;
+        if (!state.vacationMode) state.activeBudget = "payday";
+        save();
+        render();
+        showToast(state.vacationMode ? "Vacation Mode on 🏖️" : "Vacation Mode off");
       });
 
     document.getElementById("set-export").addEventListener("click", exportData);
@@ -2735,6 +3051,17 @@
 
   const settingsBtn = document.getElementById("settings-btn");
   if (settingsBtn) settingsBtn.addEventListener("click", openSettings);
+
+  const budgetSwitchEl = document.getElementById("budget-switch");
+  if (budgetSwitchEl)
+    budgetSwitchEl.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-bud]");
+      if (!btn) return;
+      state.activeBudget = btn.dataset.bud === "vacation" ? "vacation" : "payday";
+      state.view = "dashboard";
+      save();
+      render();
+    });
 
   const headerLogBtn = document.getElementById("header-log");
   if (headerLogBtn)
