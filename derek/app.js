@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "98";
+  const APP_VERSION = "99";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -3047,20 +3047,23 @@
     const cloudBlock = !cloudOn()
       ? ""
       : cloudUser
-      ? `<div class="settings-stat">☁️ Synced as ${esc(currentEmail())}</div>
-         <button class="btn btn-ghost btn-block btn-sm" id="set-signout">Sign out</button>
-         <div class="divider"></div>`
-      : `<button class="btn btn-primary btn-block" id="set-signin">☁️ Sign in to sync</button>
-         <p class="footer-note" style="margin:8px 0 16px;">Sync this budget across devices and share monthly results.</p>`;
+      ? `<div class="section-label set-sec">Account</div>
+         <div class="set-status">
+           <span class="set-status-txt">☁️ Synced as ${esc(currentEmail())}</span>
+           <button class="btn btn-ghost btn-xs" id="set-signout">Sign out</button>
+         </div>`
+      : `<div class="section-label set-sec">Account</div>
+         <button class="btn btn-primary btn-block" id="set-signin">☁️ Sign in to sync</button>
+         <p class="footer-note" style="margin:6px 0 0;">Sync across devices and share monthly results.</p>`;
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
           <h2>Settings &amp; backup</h2>
-          <p class="sub">Your budget lives only on this device. Back it up so you never lose it if you clear your browser or switch phones.</p>
+          <p class="sub">Everything is stored on this device — back it up so you never lose it.</p>
 
-          <div class="settings-stat">${periods} pay period${periods === 1 ? "" : "s"} · ${txns} transaction${txns === 1 ? "" : "s"} stored</div>
           ${cloudBlock}
 
+          <div class="section-label set-sec">Preferences</div>
           <div class="vac-row">
             <div class="vac-copy">
               <div class="vac-title">🏖️ Vacation Mode</div>
@@ -3071,20 +3074,20 @@
               <span class="switch-track" aria-hidden="true"></span>
             </label>
           </div>
-          <div class="divider"></div>
 
-          <button class="btn btn-primary btn-block" id="set-export">⬇️ Download backup</button>
-          <p class="footer-note" style="margin:8px 0 16px;">${esc(lastBackupLabel())} · saves a <code>.json</code> file you can keep safe or move to another device.</p>
+          <div class="section-label set-sec">Your data</div>
+          <div class="field-row">
+            <button class="btn btn-primary" id="set-export" style="flex:1;">⬇️ Download</button>
+            <label class="btn btn-ghost" for="set-import-file" style="flex:1;cursor:pointer;">⬆️ Restore</label>
+            <input type="file" id="set-import-file" accept="application/json,.json" style="position:absolute;width:1px;height:1px;opacity:0;" />
+          </div>
+          <p class="footer-note" style="margin:8px 0 0;">${esc(lastBackupLabel())} · saves a <code>.json</code> you can keep or move to another device. Restoring replaces everything here.</p>
 
-          <label class="btn btn-ghost btn-block" for="set-import-file" style="cursor:pointer;">⬆️ Restore from backup</label>
-          <input type="file" id="set-import-file" accept="application/json,.json" style="position:absolute;width:1px;height:1px;opacity:0;" />
-          <p class="footer-note" style="margin:8px 0 16px;">Restoring replaces everything currently in the app.</p>
+          <button class="btn btn-ghost btn-block" id="set-close" style="margin-top:22px;">Close</button>
+          <p class="set-version">Version ${esc(APP_VERSION)} · ${periods} pay period${periods === 1 ? "" : "s"} · ${txns} transaction${txns === 1 ? "" : "s"}</p>
 
           <div class="divider"></div>
-          <button class="btn btn-ghost btn-block" id="set-close">Close</button>
-          <p class="footer-note" style="margin-top:14px;">Version ${esc(APP_VERSION)}</p>
-          <div class="divider"></div>
-          <button class="btn btn-danger btn-block btn-sm" id="set-reset" style="margin-top:2px;">Erase all data</button>
+          <button class="btn btn-danger btn-block btn-sm" id="set-reset">Erase all data</button>
         </div>
       </div>
     `);
