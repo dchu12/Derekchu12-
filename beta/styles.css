@@ -7,7 +7,7 @@
   --surface-2: #ffe9da;
   --border: #f7d6bd;
   --text: #2b1a0e;
-  --text-dim: #8a6a53;
+  --text-dim: #6d5240;
   --accent: #ea580c;        /* pumpkin orange — primary */
   --accent-2: #f59e0b;      /* amber — the touch */
   --accent-soft: #ffe0cc;
@@ -518,6 +518,20 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .total-row { display: flex; justify-content: space-between; align-items: center; background: var(--surface-2); border-radius: 12px; padding: 11px 13px; margin-top: 10px; font-weight: 700; font-size: 14px; }
 .total-row b { font-size: 16px; color: var(--accent); font-variant-numeric: tabular-nums; }
 
+/* Log spend relocated into the Expense Categories header */
+.cat-head-actions { display: flex; align-items: center; gap: 8px; }
+.cat-head-actions .btn-sm { white-space: nowrap; }
+
+/* First-run welcome intro */
+.intro-card { text-align: center; }
+.intro-emoji { font-size: 34px; line-height: 1; margin-bottom: 6px; }
+.intro-h { margin: 0 0 4px; }
+.intro-p { color: var(--text-dim); font-size: 14px; margin: 0 0 12px; }
+.intro-list { list-style: none; margin: 0 0 12px; padding: 0; text-align: left; display: flex; flex-direction: column; gap: 10px; }
+.intro-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; color: var(--text); }
+.intro-list .ib { flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.intro-foot { font-size: 12.5px; color: var(--text-dim); margin: 0; }
+
 /* Overspend patterns */
 .ov-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .ov-item:last-child { border-bottom: none; }
@@ -668,7 +682,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .rs-month-tag { font-size: 12px; font-weight: 600; color: var(--text-dim); }
 
 /* Spend-tab category filter chips */
-.spend-filter { flex-wrap: nowrap; overflow-x: auto; gap: 6px; margin: 2px 0 12px; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.spend-filter { flex-wrap: wrap; gap: 6px; margin: 2px 0 12px; }
 .spend-filter .chip { flex: 0 0 auto; }
 
 /* Editable transactions inside a History period detail */

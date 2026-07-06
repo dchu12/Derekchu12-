@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "103";
+  const APP_VERSION = "104";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -830,11 +830,26 @@
     const template = state.template || { frequency: "biweekly", categories: STARTER_CATEGORIES };
 
     main.innerHTML = `
+      ${
+        isFirst
+          ? `<div class="card intro-card">
+               <div class="intro-emoji" aria-hidden="true">👋</div>
+               <h2 class="intro-h">Welcome to Yosan</h2>
+               <p class="intro-p">Budgeting that starts the moment you get paid:</p>
+               <ul class="intro-list">
+                 <li><span class="ib" aria-hidden="true">💵</span> Enter your paycheck and split it into categories.</li>
+                 <li><span class="ib" aria-hidden="true">✏️</span> Log spending in a tap — see what's left update live.</li>
+                 <li><span class="ib" aria-hidden="true">🎉</span> Next payday, start fresh and watch your savings grow.</li>
+               </ul>
+               <p class="intro-foot">Private and saved right on this device.</p>
+             </div>`
+          : ""
+      }
       <div class="card">
-        <h2>${isFirst ? "Welcome 👋" : "New payday 🎉"}</h2>
+        <h2>${isFirst ? "Set up your first budget" : "New payday 🎉"}</h2>
         <p class="sub">${
           isFirst
-            ? "Set your budget once, right when you get paid. Enter your paycheck and split it into categories."
+            ? "Enter your paycheck below, then split it into categories."
             : "You got paid again — set up this pay period's budget."
         }</p>
 
@@ -1317,7 +1332,10 @@
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Expense Categories</h2>
-          <button class="icon-btn" id="manage-cats" aria-label="Manage categories" title="Manage categories"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="var(--surface-2)"/><circle cx="15" cy="12" r="2.4" fill="var(--surface-2)"/><circle cx="8" cy="17" r="2.4" fill="var(--surface-2)"/></svg></button>
+          <div class="cat-head-actions">
+            <button class="btn btn-primary btn-sm" id="cat-log-spend">Log spend</button>
+            <button class="icon-btn" id="manage-cats" aria-label="Manage categories" title="Manage categories"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="var(--surface-2)"/><circle cx="15" cy="12" r="2.4" fill="var(--surface-2)"/><circle cx="8" cy="17" r="2.4" fill="var(--surface-2)"/></svg></button>
+          </div>
         </div>
         ${cats}
       </div>
@@ -1338,14 +1356,14 @@
         </div>
       </div>
 
-      <button class="btn btn-block btn-payday" id="add-income">${isVac ? "Add to vacation budget" : "Add extra income"}</button>
-      <button class="btn btn-block btn-payday" id="new-payday" style="margin-top:10px;">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
+      <button class="btn btn-block btn-payday" id="new-payday">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
     `;
 
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
+    const catLog = document.getElementById("cat-log-spend");
+    if (catLog) catLog.addEventListener("click", () => openSpendModal(p));
     const incManage = document.getElementById("income-manage");
     if (incManage) incManage.addEventListener("click", () => openIncomeManager(p));
-    document.getElementById("add-income").addEventListener("click", () => openIncomeModal(p));
     document.getElementById("new-payday").addEventListener("click", () => (isVac ? confirmEndVacation(p) : confirmNewPayday(p)));
     const ed = document.getElementById("edit-dates");
     if (ed) ed.addEventListener("click", () => openPeriodDates(p));
@@ -2419,9 +2437,11 @@
                .map((s) => {
                  const trend = s.last > s.avg * 1.15 ? "up" : s.last < s.avg * 0.85 ? "down" : "steady";
                  const arrow = trend === "up" ? "↑" : trend === "down" ? "↓" : "→";
+                 const pct = s.avg > 0 ? Math.round(Math.abs(s.last - s.avg) / s.avg * 100) : 0;
+                 const badge = trend === "steady" ? "on track" : `${arrow} ${pct}%`;
                  return `<div class="pat-item">
                      <span class="pat-name">${esc(s.emoji)} ${esc(s.name)}</span>
-                     <span class="pat-nums">avg <b>${fmt(s.avg)}</b> · last ${fmt(s.last)} <span class="pat-trend ${trend}">${arrow}</span></span>
+                     <span class="pat-nums">avg <b>${fmt(s.avg)}</b> · last ${fmt(s.last)} <span class="pat-trend ${trend}">${badge}</span></span>
                    </div>`;
                })
                .join("")}
@@ -2511,7 +2531,7 @@
       </div>`
       : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`;
 
-    main.innerHTML = analyticsCards + historyCard + exportCard + goalsCard;
+    main.innerHTML = goalsCard + analyticsCards + historyCard + exportCard;
 
     document.getElementById("rp-period").addEventListener("change", (e) => { state._reportId = e.target.value; render(); });
     const rpShare = document.getElementById("rp-share");
@@ -3045,42 +3065,37 @@
     return (names[Number(parts[1]) - 1] || "") + " " + parts[0];
   }
 
+  // Render the signed-in user's own monthly results from local data, with an
+  // invite to sign in for the combined household view. `personCardFn` is the
+  // shared card renderer defined below.
+  function renderOwnResults(personCardFn) {
+    const myName = (WORKSPACES && WORKSPACES[active] && WORKSPACES[active].name) || PERSON_NAME;
+    const mine = computeResultsFor(state, myName);
+    if (!mine.months.length) {
+      main.innerHTML = `<div class="card"><h2>Your results</h2><p class="sub">Once you finish a pay period, each month's income, spending, and savings show up here.</p></div>`;
+      return;
+    }
+    const sel = state._resultsMonth && mine.months.some((m) => m.month === state._resultsMonth) ? state._resultsMonth : mine.months[0].month;
+    const m = mine.months.find((x) => x.month === sel) || mine.months[0];
+    main.innerHTML = `
+      <div class="card">
+        <h2>Your results</h2>
+        <div class="field" style="margin-bottom:10px;">
+          <select id="rs-month">
+            ${mine.months.map((mm) => `<option value="${mm.month}" ${mm.month === sel ? "selected" : ""}>${monthLabel(mm.month)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="rs-combined">Saved this month <b class="${m.saved >= 0 ? "rs-pos" : "rs-neg"}">${fmt(m.saved)}</b></div>
+        ${cloudOn() ? `<button class="btn btn-ghost btn-block btn-sm" id="rs-signin" style="margin-top:10px;">☁️ Sign in to compare with ${esc(PARTNER_NAME)}</button>` : ""}
+      </div>
+      ${personCardFn(myName, m)}`;
+    const monthSel = document.getElementById("rs-month");
+    if (monthSel) monthSel.addEventListener("change", () => { state._resultsMonth = monthSel.value; renderResults(); });
+    const sb = document.getElementById("rs-signin");
+    if (sb) sb.addEventListener("click", () => openLogin(false));
+  }
+
   function renderResults() {
-    if (!cloudOn()) {
-      main.innerHTML = `<div class="card"><h2>Shared results</h2><p class="sub">Cloud sync isn't available right now — reconnect to see combined monthly results.</p></div>`;
-      return;
-    }
-    if (!cloudUser) {
-      main.innerHTML = `<div class="card"><h2>Shared results</h2><p class="sub">Sign in to see your and ${esc(PARTNER_NAME)}'s combined monthly results.</p><button class="btn btn-primary btn-block" id="rs-signin">☁️ Sign in to sync</button></div>`;
-      const b = document.getElementById("rs-signin");
-      if (b) b.addEventListener("click", () => openLogin(false));
-      return;
-    }
-
-    const k = resultsCache.kelly;
-    const d = resultsCache.derek;
-    const monthSet = {};
-    [k, d].forEach((doc) => {
-      if (doc && doc.months) doc.months.forEach((m) => (monthSet[m.month] = true));
-    });
-    const months = Object.keys(monthSet).sort().reverse();
-
-    if (!months.length) {
-      main.innerHTML = `<div class="card"><h2>Shared results</h2><p class="sub">No results yet. Once you both have a budget going, each month's totals show up here.</p></div>`;
-      return;
-    }
-
-    const sel = state._resultsMonth && monthSet[state._resultsMonth] ? state._resultsMonth : months[0];
-    // Show the selected month for each person, or fall back to their own latest month —
-    // pay cycles don't always line up to the same calendar month.
-    const pick = (doc) => {
-      if (!doc || !doc.months || !doc.months.length) return null;
-      return doc.months.find((m) => m.month === sel) || doc.months[0];
-    };
-    const km = pick(k);
-    const dm = pick(d);
-    const combinedSaved = (km ? km.saved : 0) + (dm ? dm.saved : 0);
-
     const personCard = (title, m) => {
       if (!m)
         return `<div class="card"><h3>${esc(title)}</h3><p class="sub">No budget recorded yet — nothing has synced from them.</p></div>`;
@@ -3107,6 +3122,36 @@
           <div class="rs-cats">${cats || '<p class="sub">No categories.</p>'}</div>
         </div>`;
     };
+
+    // Not synced (offline or signed out) → show your own results from local data.
+    if (!cloudOn() || !cloudUser) {
+      renderOwnResults(personCard);
+      return;
+    }
+
+    const k = resultsCache.kelly;
+    const d = resultsCache.derek;
+    const monthSet = {};
+    [k, d].forEach((doc) => {
+      if (doc && doc.months) doc.months.forEach((m) => (monthSet[m.month] = true));
+    });
+    const months = Object.keys(monthSet).sort().reverse();
+
+    if (!months.length) {
+      main.innerHTML = `<div class="card"><h2>Shared results</h2><p class="sub">No results yet. Once you both have a budget going, each month's totals show up here.</p></div>`;
+      return;
+    }
+
+    const sel = state._resultsMonth && monthSet[state._resultsMonth] ? state._resultsMonth : months[0];
+    // Show the selected month for each person, or fall back to their own latest month —
+    // pay cycles don't always line up to the same calendar month.
+    const pick = (doc) => {
+      if (!doc || !doc.months || !doc.months.length) return null;
+      return doc.months.find((m) => m.month === sel) || doc.months[0];
+    };
+    const km = pick(k);
+    const dm = pick(d);
+    const combinedSaved = (km ? km.saved : 0) + (dm ? dm.saved : 0);
 
     main.innerHTML = `
       <div class="card">
