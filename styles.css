@@ -290,7 +290,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   font-size: 16px;
   z-index: 1;
 }
-.money-input input { padding-left: 26px; }
+.money-input input { padding-left: var(--cur-pad, 26px); }
 
 /* Natural-language quick-add field in the Log spending modal */
 .quick-add-field label { color: var(--accent); }

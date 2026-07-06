@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "97";
+  const APP_VERSION = "98";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -110,7 +110,8 @@
    * another currency (e.g. a Japan trip in ¥). `_cur` is the currency the money
    * formatters use right now — set per period at the top of each render. */
   const CURRENCIES = {
-    USD: { symbol: "$", decimals: 2, label: "$ USD" },
+    USD: { symbol: "$", decimals: 2, label: "$ USD (US dollar)" },
+    CAD: { symbol: "C$", decimals: 2, label: "C$ CAD (Canadian dollar)" },
     JPY: { symbol: "¥", decimals: 0, label: "¥ JPY (Japanese yen)" },
     MYR: { symbol: "RM", decimals: 2, label: "RM MYR (Malaysian ringgit)" },
     EUR: { symbol: "€", decimals: 2, label: "€ EUR (Euro)" },
@@ -123,7 +124,13 @@
   const curOf = (p) => (p && p.currency && CURRENCIES[p.currency] ? p.currency : HOME_CUR);
   const setCur = (code) => { _cur = CURRENCIES[code] ? code : HOME_CUR; };
   // Sets the "$"-prefix on money inputs to the active currency symbol.
-  const applyCurSymbol = (el) => { if (el) el.style.setProperty("--cur-symbol", JSON.stringify(curInfo().symbol)); };
+  const applyCurSymbol = (el) => {
+    if (!el) return;
+    const info = curInfo();
+    el.style.setProperty("--cur-symbol", JSON.stringify(info.symbol));
+    // Wider symbols (RM, C$) need more input padding so the text doesn't overlap.
+    el.style.setProperty("--cur-pad", info.symbol.length > 1 ? "42px" : "26px");
+  };
 
   const fmt = (n) => {
     const info = curInfo();
