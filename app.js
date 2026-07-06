@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "90";
+  const APP_VERSION = "91";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -375,6 +375,32 @@
         text: `🧭 You've slipped a little over on ${names}. No stress — ease up there or trim another category to balance it out.`,
       };
     }
+
+    // Timing for burn-rate projections (how far through the period are we?).
+    const dl = daysLeft(p);
+    const totalDays = Math.max(1, Math.round((periodEnd(p) - parseDate(p.startDate)) / 86400000));
+    const elapsed = Math.min(totalDays, Math.max(0, totalDays - dl));
+    const timeFrac = elapsed / totalDays;
+
+    // Predictive: a category not yet over, but on pace to blow its budget before payday.
+    if (dl > 0 && elapsed >= 2 && timeFrac > 0) {
+      const risky = cats
+        .map((c) => {
+          const cs = catSpent(p, c.id);
+          return { c, cs, projected: cs / timeFrac };
+        })
+        .filter((x) => x.cs > 0 && x.cs < x.c.budgeted - 0.005 && x.projected > x.c.budgeted * 1.12)
+        .sort((a, b) => b.projected / b.c.budgeted - a.projected / a.c.budgeted);
+      if (risky.length) {
+        const r = risky[0];
+        const dailyRate = r.cs / elapsed;
+        const daysToEmpty = dailyRate > 0 ? Math.max(1, Math.floor((r.c.budgeted - r.cs) / dailyRate)) : dl;
+        return {
+          tone: "close",
+          text: `📈 At this pace, ${r.c.name} runs out in about ${daysToEmpty} ${daysToEmpty === 1 ? "day" : "days"} — before your next paycheck. Easing off a little keeps it in the green.`,
+        };
+      }
+    }
     const close = cats
       .filter((c) => {
         const cs = catSpent(p, c.id);
@@ -451,6 +477,14 @@
       lines.unshift(
         `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
       );
+    }
+    // Every so often, surface a data-aware projection instead of a quote so the
+    // coach feels like it's actually watching the numbers.
+    if (dl > 0 && elapsed >= 3 && timeFrac > 0) {
+      const projSaved = periodIncome(p) - totalSpent(p) / timeFrac;
+      if (projSaved > 0.005 && Math.random() < 0.5) {
+        return { tone: "ok", text: `📊 At your current pace, you're on track to save about ${fmt(projSaved)} this period — keep it up!` };
+      }
     }
     return { tone: "ok", text: rotateLine(lines) };
   }
