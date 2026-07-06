@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "100";
+  const APP_VERSION = "101";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1512,10 +1512,26 @@
       <div class="modal-overlay">
         <div class="modal quick-add" role="dialog" aria-modal="true" aria-label="Quick add">
           <h2>Quick add</h2>
-          <p class="sub">${isVac ? "Top up your vacation budget, or end the trip." : "Add money to this period, or close it out and start fresh."}</p>
-          <button class="btn btn-block btn-payday" id="qa-income">${isVac ? "Add to vacation budget" : "Add extra income"}</button>
-          <button class="btn btn-block btn-payday" id="qa-payday" style="margin-top:10px;">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
-          <button class="btn btn-ghost btn-block" id="qa-cancel" style="margin-top:10px;">Cancel</button>
+          <p class="sub">${isVac ? "Top up your vacation budget, or wrap up the trip." : "Add money to this period, or close it out and start fresh."}</p>
+          <div class="qa-list">
+            <button class="qa-action" id="qa-income" type="button">
+              <span class="qa-ico" aria-hidden="true">${isVac ? "🏝️" : "💵"}</span>
+              <span class="qa-text">
+                <span class="qa-t">${isVac ? "Add to vacation budget" : "Add extra income"}</span>
+                <span class="qa-d">${isVac ? "A gift, refund, or top-up for the trip" : "A bonus, refund, or gift for this period"}</span>
+              </span>
+              <span class="qa-chev" aria-hidden="true">›</span>
+            </button>
+            <button class="qa-action" id="qa-payday" type="button">
+              <span class="qa-ico" aria-hidden="true">${isVac ? "🏁" : "🎉"}</span>
+              <span class="qa-text">
+                <span class="qa-t">${isVac ? "End vacation" : "Start a new pay period"}</span>
+                <span class="qa-d">${isVac ? "Wrap up the trip and see how you did" : "Got paid — close this one out and start fresh"}</span>
+              </span>
+              <span class="qa-chev" aria-hidden="true">›</span>
+            </button>
+          </div>
+          <button class="btn btn-ghost btn-block" id="qa-cancel" type="button">Cancel</button>
         </div>
       </div>
     `);
@@ -3069,6 +3085,14 @@
       : `<div class="section-label set-sec">Account</div>
          <button class="btn btn-primary btn-block" id="set-signin">☁️ Sign in to sync</button>
          <p class="footer-note" style="margin:6px 0 0;">Sync across devices and share monthly results.</p>`;
+    const householdBlock = !cloudUser
+      ? ""
+      : `<div class="section-label set-sec">Household</div>
+         <div class="ws-switch" id="set-ws-switch">
+           <button type="button" class="ws-btn ${active === "derek" ? "active" : ""}" data-ws="derek">${esc(WORKSPACES.derek.name)}</button>
+           <button type="button" class="ws-btn ${active === "kelly" ? "active" : ""}" data-ws="kelly">${esc(WORKSPACES.kelly.name)}</button>
+         </div>
+         <p class="footer-note" style="margin:6px 0 0;">Choose whose budget you're viewing.</p>`;
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
@@ -3076,6 +3100,8 @@
           <p class="sub">Everything is stored on this device — back it up so you never lose it.</p>
 
           ${cloudBlock}
+
+          ${householdBlock}
 
           <div class="section-label set-sec">Preferences</div>
           <div class="vac-row">
@@ -3118,6 +3144,15 @@
         Cloud.signOut();
         close();
         showToast("Signed out — syncing off");
+      });
+
+    const wsSwitchSet = document.getElementById("set-ws-switch");
+    if (wsSwitchSet)
+      wsSwitchSet.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-ws]");
+        if (!btn) return;
+        setActive(btn.dataset.ws);
+        close();
       });
 
     const vacToggle = document.getElementById("set-vacation");
@@ -3409,13 +3444,6 @@
     headerAddBtn.addEventListener("click", () => {
       const p = activePeriod();
       if (p) openQuickAdd(p);
-    });
-
-  const wsSwitchEl = document.getElementById("ws-switch");
-  if (wsSwitchEl)
-    wsSwitchEl.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-ws]");
-      if (btn) setActive(btn.dataset.ws);
     });
 
   /* Boot */

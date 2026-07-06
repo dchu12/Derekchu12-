@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "100";
+  const APP_VERSION = "101";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1500,10 +1500,26 @@
       <div class="modal-overlay">
         <div class="modal quick-add" role="dialog" aria-modal="true" aria-label="Quick add">
           <h2>Quick add</h2>
-          <p class="sub">${isVac ? "Top up your vacation budget, or end the trip." : "Add money to this period, or close it out and start fresh."}</p>
-          <button class="btn btn-block btn-payday" id="qa-income">${isVac ? "Add to vacation budget" : "Add extra income"}</button>
-          <button class="btn btn-block btn-payday" id="qa-payday" style="margin-top:10px;">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
-          <button class="btn btn-ghost btn-block" id="qa-cancel" style="margin-top:10px;">Cancel</button>
+          <p class="sub">${isVac ? "Top up your vacation budget, or wrap up the trip." : "Add money to this period, or close it out and start fresh."}</p>
+          <div class="qa-list">
+            <button class="qa-action" id="qa-income" type="button">
+              <span class="qa-ico" aria-hidden="true">${isVac ? "🏝️" : "💵"}</span>
+              <span class="qa-text">
+                <span class="qa-t">${isVac ? "Add to vacation budget" : "Add extra income"}</span>
+                <span class="qa-d">${isVac ? "A gift, refund, or top-up for the trip" : "A bonus, refund, or gift for this period"}</span>
+              </span>
+              <span class="qa-chev" aria-hidden="true">›</span>
+            </button>
+            <button class="qa-action" id="qa-payday" type="button">
+              <span class="qa-ico" aria-hidden="true">${isVac ? "🏁" : "🎉"}</span>
+              <span class="qa-text">
+                <span class="qa-t">${isVac ? "End vacation" : "Start a new pay period"}</span>
+                <span class="qa-d">${isVac ? "Wrap up the trip and see how you did" : "Got paid — close this one out and start fresh"}</span>
+              </span>
+              <span class="qa-chev" aria-hidden="true">›</span>
+            </button>
+          </div>
+          <button class="btn btn-ghost btn-block" id="qa-cancel" type="button">Cancel</button>
         </div>
       </div>
     `);
