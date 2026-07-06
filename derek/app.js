@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "100";
+  const APP_VERSION = "101";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -3069,6 +3069,14 @@
       : `<div class="section-label set-sec">Account</div>
          <button class="btn btn-primary btn-block" id="set-signin">☁️ Sign in to sync</button>
          <p class="footer-note" style="margin:6px 0 0;">Sync across devices and share monthly results.</p>`;
+    const householdBlock = !cloudUser
+      ? ""
+      : `<div class="section-label set-sec">Household</div>
+         <div class="ws-switch" id="set-ws-switch">
+           <button type="button" class="ws-btn ${active === "derek" ? "active" : ""}" data-ws="derek">${esc(WORKSPACES.derek.name)}</button>
+           <button type="button" class="ws-btn ${active === "kelly" ? "active" : ""}" data-ws="kelly">${esc(WORKSPACES.kelly.name)}</button>
+         </div>
+         <p class="footer-note" style="margin:6px 0 0;">Choose whose budget you're viewing.</p>`;
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
@@ -3076,6 +3084,8 @@
           <p class="sub">Everything is stored on this device — back it up so you never lose it.</p>
 
           ${cloudBlock}
+
+          ${householdBlock}
 
           <div class="section-label set-sec">Preferences</div>
           <div class="vac-row">
@@ -3118,6 +3128,15 @@
         Cloud.signOut();
         close();
         showToast("Signed out — syncing off");
+      });
+
+    const wsSwitchSet = document.getElementById("set-ws-switch");
+    if (wsSwitchSet)
+      wsSwitchSet.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-ws]");
+        if (!btn) return;
+        setActive(btn.dataset.ws);
+        close();
       });
 
     const vacToggle = document.getElementById("set-vacation");
@@ -3409,13 +3428,6 @@
     headerAddBtn.addEventListener("click", () => {
       const p = activePeriod();
       if (p) openQuickAdd(p);
-    });
-
-  const wsSwitchEl = document.getElementById("ws-switch");
-  if (wsSwitchEl)
-    wsSwitchEl.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-ws]");
-      if (btn) setActive(btn.dataset.ws);
     });
 
   /* Boot */
