@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "101";
+  const APP_VERSION = "102";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1302,6 +1302,14 @@
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
 
+      <button type="button" class="card income-card" id="income-manage" aria-label="Manage income">
+        <span class="ic-left">
+          <span class="ic-k">${isVac ? "Vacation fund + top-ups" : "Income this period"}</span>
+          <span class="ic-v">${fmt(periodIncome(p))}</span>
+        </span>
+        <span class="ic-caret" aria-hidden="true">›</span>
+      </button>
+
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Expense Categories</h2>
@@ -1323,6 +1331,8 @@
     `;
 
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
+    const incManage = document.getElementById("income-manage");
+    if (incManage) incManage.addEventListener("click", () => openIncomeManager(p));
     document.getElementById("add-income").addEventListener("click", () => openIncomeModal(p));
     document.getElementById("new-payday").addEventListener("click", () => (isVac ? confirmEndVacation(p) : confirmNewPayday(p)));
     const ed = document.getElementById("edit-dates");
@@ -1536,25 +1546,39 @@
   }
 
   /* ---------- Add extra income to the current period ---------- */
-  function openIncomeModal(p) {
+  // editEntry: "base" edits the paycheck/fund amount, an object edits that
+  // extra-income entry, and null/undefined adds a new one.
+  function openIncomeModal(p, editEntry, afterSave) {
     setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
+    const editingBase = editEntry === "base";
+    const editingExtra = editEntry && typeof editEntry === "object";
+    const done = afterSave || (() => render());
+    const title = editingBase
+      ? (isVac ? "Edit vacation fund" : "Edit paycheck")
+      : editingExtra
+      ? "Edit income"
+      : (isVac ? "Add to vacation budget" : "Add extra income");
+    const sub = editingBase
+      ? (isVac ? "The starting fund you set for this trip." : "Your take-home pay for this period.")
+      : (isVac ? "Extra cash for the trip — a gift, refund, or top-up. It increases what you can spend on vacation." : "A bonus, refund, or second paycheck this period — it increases what you can save.");
+    const amtVal = editingBase ? p.paycheckAmount : editingExtra ? editEntry.amount : "";
     const { close } = mountModal(`
       <div class="modal-overlay">
-        <div class="modal" role="dialog" aria-modal="true" aria-label="${isVac ? "Add to vacation budget" : "Add income"}">
-          <h2>${isVac ? "Add to vacation budget" : "Add extra income"}</h2>
-          <p class="sub">${isVac ? "Extra cash for the trip — a gift, refund, or top-up. It increases what you can spend on vacation." : "A bonus, refund, or second paycheck this period — it increases what you can save."}</p>
+        <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+          <h2>${title}</h2>
+          <p class="sub">${sub}</p>
           <div class="field money-input">
             <label for="inc-amount">Amount</label>
-            <input id="inc-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01" />
+            <input id="inc-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01" value="${editingBase || editingExtra ? esc(amtVal) : ""}" />
           </div>
-          <div class="field">
+          ${editingBase ? "" : `<div class="field">
             <label for="inc-note">Note (optional)</label>
-            <input id="inc-note" placeholder="e.g. Work bonus" />
-          </div>
+            <input id="inc-note" placeholder="e.g. Work bonus" value="${editingExtra ? esc(editEntry.note || "") : ""}" />
+          </div>`}
           <div class="field-row">
             <button class="btn btn-ghost" id="inc-cancel" style="flex:1;">Cancel</button>
-            <button class="btn btn-primary" id="inc-save" style="flex:2;">Add income</button>
+            <button class="btn btn-primary" id="inc-save" style="flex:2;">${editingBase || editingExtra ? "Save" : "Add income"}</button>
           </div>
         </div>
       </div>
@@ -1569,23 +1593,100 @@
         showFieldError(amountEl, "Enter an amount greater than zero.");
         return;
       }
-      if (!p.extraIncome) p.extraIncome = [];
-      p.extraIncome.push({
-        id: uid(),
-        amount,
-        note: document.getElementById("inc-note").value.trim(),
-        date: todayISO(),
-      });
+      if (editingBase) {
+        p.paycheckAmount = amount;
+      } else if (editingExtra) {
+        editEntry.amount = amount;
+        editEntry.note = document.getElementById("inc-note").value.trim();
+      } else {
+        if (!p.extraIncome) p.extraIncome = [];
+        p.extraIncome.push({
+          id: uid(),
+          amount,
+          note: document.getElementById("inc-note").value.trim(),
+          date: todayISO(),
+        });
+      }
       save();
       close();
-      render();
-      showToast("Income added");
+      done();
+      showToast(editingBase || editingExtra ? "Income updated" : "Income added");
     });
+  }
+
+  /* ---------- Income manager: view / edit / delete every income source ---------- */
+  function openIncomeManager(p) {
+    setCur(curOf(p));
+    const isVac = periodKind(p) === "vacation";
+    const reopen = () => { render(); openIncomeManager(p); };
+    const extras = p.extraIncome || [];
+    const extraRows = extras
+      .map(
+        (e) => `
+        <div class="inc-row">
+          <button type="button" class="inc-main" data-edit="${e.id}">
+            <span class="inc-ico">🎁</span>
+            <span class="inc-txt"><span class="inc-t">${esc(e.note || "Extra income")}</span><span class="inc-d">${esc(fmtDateShort(e.date))}</span></span>
+          </button>
+          <span class="inc-right"><span class="inc-amt">${fmt(e.amount)}</span>
+          <button class="rm" data-rm="${e.id}" title="Delete" aria-label="Delete ${esc(e.note || "extra income")}">🗑</button></span>
+        </div>`
+      )
+      .join("");
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Income">
+          <h2>Income</h2>
+          <p class="sub">${isVac ? "Fix the fund or remove a top-up you didn't mean to add." : "Edit your paycheck or remove income you didn't mean to add."}</p>
+          <div class="inc-list">
+            <div class="inc-row inc-base">
+              <button type="button" class="inc-main" data-edit="base">
+                <span class="inc-ico inc-ico-base">${isVac ? "🏝️" : "💵"}</span>
+                <span class="inc-txt"><span class="inc-t">${isVac ? "Vacation fund" : "Paycheck"}</span><span class="inc-d">Tap to change the amount</span></span>
+              </button>
+              <span class="inc-right"><span class="inc-amt">${fmt(p.paycheckAmount)}</span></span>
+            </div>
+            ${extraRows}
+          </div>
+          <button class="btn btn-ghost btn-sm" id="inc-add" style="margin-top:2px;">+ Add income</button>
+          <div class="total-row"><span>Total income</span><b>${fmt(periodIncome(p))}</b></div>
+          <button class="btn btn-ghost btn-block" id="inc-close" style="margin-top:14px;">Close</button>
+        </div>
+      </div>
+    `);
+    applyCurSymbol(modalRoot);
+    document.getElementById("inc-close").addEventListener("click", close);
+    document.getElementById("inc-add").addEventListener("click", () => openIncomeModal(p, null, reopen));
+    modalRoot.querySelectorAll("[data-edit]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.edit;
+        if (id === "base") return openIncomeModal(p, "base", reopen);
+        const e = (p.extraIncome || []).find((x) => x.id === id);
+        if (e) openIncomeModal(p, e, reopen);
+      })
+    );
+    modalRoot.querySelectorAll("[data-rm]").forEach((btn) =>
+      btn.addEventListener("click", () => {
+        const arr = p.extraIncome || [];
+        const idx = arr.findIndex((x) => x.id === btn.dataset.rm);
+        if (idx < 0) return;
+        const removed = arr[idx];
+        arr.splice(idx, 1);
+        save();
+        reopen();
+        showToast("Income removed", "Undo", () => {
+          (p.extraIncome = p.extraIncome || []).splice(idx, 0, removed);
+          save();
+          reopen();
+        });
+      })
+    );
   }
 
   /* ---------- Manage categories (add / remove / edit on an active period) ---------- */
   function openManageCategories(p) {
     setCur(curOf(p));
+    const mcIsVac = periodKind(p) === "vacation";
     // Working copy — existing rows keep their id so transactions stay linked.
     let rows = p.categories.map((c) => ({
       id: c.id,
@@ -1612,12 +1713,29 @@
             <button class="btn btn-ghost" id="mc-cancel" style="flex:1;">Cancel</button>
             <button class="btn btn-primary" id="mc-save" style="flex:2;">Save changes</button>
           </div>
+          <div class="divider"></div>
+          <button class="btn btn-danger btn-block btn-sm" id="mc-delete">Delete this ${mcIsVac ? "vacation budget" : "pay period"}</button>
         </div>
       </div>
     `);
 
     applyCurSymbol(modalRoot);
     const listEl = document.getElementById("mc-list");
+
+    document.getElementById("mc-delete").addEventListener("click", () => {
+      if (
+        confirm(
+          `Delete this ${mcIsVac ? "vacation budget" : "pay period"} and everything in it? This can't be undone — download a backup first if you're unsure.`
+        )
+      ) {
+        state.periods = state.periods.filter((x) => x.id !== p.id);
+        if (mcIsVac) state.activeBudget = "payday";
+        save();
+        close();
+        render();
+        showToast("Budget deleted");
+      }
+    });
 
     enableRowDrag(listEl, (order) => {
       rows.sort((a, b) => order.indexOf(a._key) - order.indexOf(b._key));

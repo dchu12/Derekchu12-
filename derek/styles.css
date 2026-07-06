@@ -497,6 +497,26 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .qa-chev { flex: none; font-size: 24px; line-height: 1; color: var(--text-dim); font-weight: 300; }
 .quick-add #qa-cancel { margin-top: 8px; }
 
+/* Tappable income card (dashboard) + income manager sheet */
+.income-card { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; cursor: pointer; gap: 10px; }
+.income-card .ic-k { display: block; font-size: 12px; color: var(--text-dim); font-weight: 600; margin-bottom: 2px; }
+.income-card .ic-v { display: block; font-size: 19px; font-weight: 800; letter-spacing: -.01em; color: var(--text); }
+.income-card .ic-caret { flex: none; font-size: 24px; line-height: 1; color: var(--text-dim); font-weight: 300; }
+.income-card:active { transform: scale(.995); }
+.inc-list { display: flex; flex-direction: column; margin: 2px 0 4px; }
+.inc-row { display: flex; align-items: center; gap: 10px; padding: 11px 2px; border-top: 1px solid var(--border); }
+.inc-row:first-child { border-top: none; }
+.inc-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; background: none; border: none; padding: 0; text-align: left; cursor: pointer; }
+.inc-ico { flex: none; width: 38px; height: 38px; border-radius: 11px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.inc-txt { min-width: 0; }
+.inc-t { display: block; font-weight: 700; font-size: 14.5px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inc-d { display: block; font-size: 12px; color: var(--text-dim); margin-top: 1px; }
+.inc-right { flex: none; display: flex; align-items: center; gap: 2px; }
+.inc-amt { font-weight: 800; font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.inc-row .rm { width: 30px; height: 30px; border: none; background: transparent; cursor: pointer; font-size: 15px; border-radius: 9px; }
+.total-row { display: flex; justify-content: space-between; align-items: center; background: var(--surface-2); border-radius: 12px; padding: 11px 13px; margin-top: 10px; font-weight: 700; font-size: 14px; }
+.total-row b { font-size: 16px; color: var(--accent); font-variant-numeric: tabular-nums; }
+
 /* Overspend patterns */
 .ov-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .ov-item:last-child { border-bottom: none; }
