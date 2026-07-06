@@ -301,6 +301,24 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 }
 .quick-hint { min-height: 18px; margin-top: 6px; font-size: 13px; color: var(--text); }
 .quick-hint .qh-dim { color: var(--text-dim); font-weight: 400; }
+
+/* End-of-period recap card ("wrapped"-style) */
+.recap-modal { text-align: center; }
+.recap-hero {
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+  color: #fff; border-radius: 14px; padding: 22px 16px; margin-bottom: 14px;
+}
+.recap-eyebrow { font-size: 13px; font-weight: 700; opacity: 0.95; }
+.recap-range { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+.recap-big { font-size: 44px; font-weight: 800; letter-spacing: -0.02em; margin-top: 10px; line-height: 1; }
+.recap-cap { font-size: 13px; opacity: 0.92; margin-top: 6px; }
+.recap-stats { display: flex; gap: 8px; margin-bottom: 12px; }
+.recap-stat { flex: 1; background: var(--surface-2); border-radius: 12px; padding: 10px 6px; }
+.recap-stat .rs-k { font-size: 11px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.recap-stat .rs-v { font-size: 16px; font-weight: 800; margin-top: 3px; }
+.recap-stat .rs-v.pos { color: var(--good); }
+.recap-stat .rs-v.neg { color: var(--danger); }
+.recap-line { font-size: 13px; color: var(--text); background: var(--surface-2); border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; text-align: left; }
 /* When the field has a label above the input, center the "$" on the input
    (not the whole field, which would sit it too high). Label box + half the
    input height ≈ 47.5px from the field top. */
