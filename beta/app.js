@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "106";
+  const APP_VERSION = "107";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1520,7 +1520,6 @@
       <div class="modal-overlay">
         <div class="modal quick-add" role="dialog" aria-modal="true" aria-label="Quick add">
           <h2>Quick add</h2>
-          <p class="sub">${isVac ? "Top up your vacation budget, or wrap up the trip." : "Add money to this period, or close it out and start fresh."}</p>
           <div class="qa-list">
             <button class="qa-action" id="qa-income" type="button">
               <span class="qa-ico" aria-hidden="true">${isVac ? "🏝️" : "💵"}</span>
