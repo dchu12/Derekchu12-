@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "95";
+  const APP_VERSION = "96";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -106,28 +106,49 @@
   const uid = () =>
     Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+  /* Currencies. Home budget is always USD ($); vacation budgets can be set to
+   * another currency (e.g. a Japan trip in ¥). `_cur` is the currency the money
+   * formatters use right now — set per period at the top of each render. */
+  const CURRENCIES = {
+    USD: { symbol: "$", decimals: 2, label: "$ USD" },
+    JPY: { symbol: "¥", decimals: 0, label: "¥ JPY (Japanese yen)" },
+    MYR: { symbol: "RM", decimals: 2, label: "RM MYR (Malaysian ringgit)" },
+    EUR: { symbol: "€", decimals: 2, label: "€ EUR (Euro)" },
+    GBP: { symbol: "£", decimals: 2, label: "£ GBP (British pound)" },
+    THB: { symbol: "฿", decimals: 2, label: "฿ THB (Thai baht)" },
+  };
+  const HOME_CUR = "USD";
+  let _cur = HOME_CUR;
+  const curInfo = () => CURRENCIES[_cur] || CURRENCIES.USD;
+  const curOf = (p) => (p && p.currency && CURRENCIES[p.currency] ? p.currency : HOME_CUR);
+  const setCur = (code) => { _cur = CURRENCIES[code] ? code : HOME_CUR; };
+  // Sets the "$"-prefix on money inputs to the active currency symbol.
+  const applyCurSymbol = (el) => { if (el) el.style.setProperty("--cur-symbol", JSON.stringify(curInfo().symbol)); };
+
   const fmt = (n) => {
+    const info = curInfo();
     const v = Number(n || 0);
     const body =
-      "$" +
+      info.symbol +
       Math.abs(v).toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
+        minimumFractionDigits: info.decimals,
+        maximumFractionDigits: info.decimals,
       });
     return v < 0 ? "-" + body : body;
   };
 
   // Compact money for tight spots like chart labels: $1.9k, $355, -$50.
   const fmtCompact = (n) => {
+    const sym = curInfo().symbol;
     const v = Number(n || 0);
     const a = Math.abs(v);
-    const s = a >= 1000 ? "$" + (a / 1000).toFixed(a >= 10000 ? 0 : 1) + "k" : "$" + Math.round(a);
+    const s = a >= 1000 ? sym + (a / 1000).toFixed(a >= 10000 ? 0 : 1) + "k" : sym + Math.round(a);
     return (v < 0 ? "-" : "") + s;
   };
 
   const fmtShort = (n) => {
     const v = Number(n || 0);
-    return "$" + v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    return curInfo().symbol + v.toLocaleString("en-US", { maximumFractionDigits: 0 });
   };
 
   const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -731,6 +752,7 @@
   }
 
   function render() {
+    setCur(HOME_CUR); // default; period views set their own currency below
     // "History" and "Report" are now one combined "Reports" tab.
     if (state.view === "history") state.view = "report";
     // Vacation Mode off → the switcher is hidden, so never sit on the vacation view.
@@ -989,6 +1011,11 @@
     const template = state.vacationTemplate || { categories: VACATION_CATEGORIES };
     const todayIso = todayISO();
     const weekOut = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return dateToISO(d); })();
+    let selCur = template.currency && CURRENCIES[template.currency] ? template.currency : HOME_CUR;
+    setCur(selCur);
+    const curOptions = Object.keys(CURRENCIES)
+      .map((code) => `<option value="${code}" ${code === selCur ? "selected" : ""}>${esc(CURRENCIES[code].label)}</option>`)
+      .join("");
 
     main.innerHTML = `
       <div class="card">
@@ -998,6 +1025,11 @@
         <div class="field money-input">
           <label>Total vacation budget</label>
           <input id="vac-total" type="number" inputmode="decimal" placeholder="0.00" step="0.01" />
+        </div>
+
+        <div class="field">
+          <label for="vac-cur">Currency</label>
+          <select id="vac-cur">${curOptions}</select>
         </div>
 
         <div class="field-row">
@@ -1040,6 +1072,14 @@
 
     const listEl = document.getElementById("alloc-list");
     const totalEl = document.getElementById("vac-total");
+    applyCurSymbol(main);
+    const curEl = document.getElementById("vac-cur");
+    curEl.addEventListener("change", () => {
+      selCur = CURRENCIES[curEl.value] ? curEl.value : HOME_CUR;
+      setCur(selCur);
+      applyCurSymbol(main);
+      updateSummary();
+    });
 
     function drawRows() {
       listEl.innerHTML = rows.map((r) => catEditRow(r, r.id, { drag: true })).join("");
@@ -1049,6 +1089,7 @@
       rows.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
     });
     function updateSummary() {
+      setCur(selCur);
       const total = Number(totalEl.value) || 0;
       const allocated = rows.reduce((s, r) => s + (Number(r.budgeted) || 0), 0);
       const remaining = total - allocated;
@@ -1108,6 +1149,7 @@
       const period = {
         id: uid(),
         kind: "vacation",
+        currency: selCur,
         paycheckAmount: total,
         startDate,
         endDate,
@@ -1133,6 +1175,7 @@
       });
       state.periods.push(period);
       state.vacationTemplate = {
+        currency: selCur,
         categories: cats.map((c) => ({ emoji: c.emoji, name: c.name, budgeted: c.budgeted, fixed: c.fixed })),
       };
       state.activeBudget = "vacation";
@@ -1146,6 +1189,7 @@
 
   /* ---------- Dashboard ---------- */
   function renderDashboard(p) {
+    setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
     const budgeted = totalBudgeted(p);
     const spent = totalSpent(p);
@@ -1368,6 +1412,10 @@
 
   /* ---------- Edit the vacation budget's date range ---------- */
   function openVacationDates(p) {
+    const curNow = curOf(p);
+    const curOptions = Object.keys(CURRENCIES)
+      .map((code) => `<option value="${code}" ${code === curNow ? "selected" : ""}>${esc(CURRENCIES[code].label)}</option>`)
+      .join("");
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Edit vacation dates">
@@ -1383,6 +1431,10 @@
               <input id="vd-end" type="date" value="${esc(p.endDate || p.startDate)}" />
             </div>
           </div>
+          <div class="field">
+            <label for="vd-cur">Currency</label>
+            <select id="vd-cur">${curOptions}</select>
+          </div>
           <div class="field-row" style="margin-top:14px;">
             <button class="btn btn-ghost" id="vd-cancel" style="flex:1;">Cancel</button>
             <button class="btn btn-primary" id="vd-save" style="flex:2;">Save</button>
@@ -1396,17 +1448,20 @@
       const e = document.getElementById("vd-end").value;
       if (!s || !e) { showToast("Pick both a start and end date."); return; }
       if (parseDate(e) < parseDate(s)) { showToast("End date can't be before the start date."); return; }
+      const cv = document.getElementById("vd-cur").value;
       p.startDate = s;
       p.endDate = e;
+      p.currency = CURRENCIES[cv] ? cv : HOME_CUR;
       save();
       close();
       render();
-      showToast("Vacation dates updated ✓");
+      showToast("Vacation updated ✓");
     });
   }
 
   /* ---------- End (close) the vacation budget ---------- */
   function confirmEndVacation(p) {
+    setCur(curOf(p));
     const remaining = totalBudgeted(p) - totalSpent(p);
     const { close } = mountModal(`
       <div class="modal-overlay">
@@ -1461,6 +1516,7 @@
 
   /* ---------- Add extra income to the current period ---------- */
   function openIncomeModal(p) {
+    setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
     const { close } = mountModal(`
       <div class="modal-overlay">
@@ -1482,6 +1538,7 @@
         </div>
       </div>
     `);
+    applyCurSymbol(modalRoot);
     const amountEl = document.getElementById("inc-amount");
     amountEl.addEventListener("input", () => clearFieldError(amountEl));
     document.getElementById("inc-cancel").addEventListener("click", close);
@@ -1507,6 +1564,7 @@
 
   /* ---------- Manage categories (add / remove / edit on an active period) ---------- */
   function openManageCategories(p) {
+    setCur(curOf(p));
     // Working copy — existing rows keep their id so transactions stay linked.
     let rows = p.categories.map((c) => ({
       id: c.id,
@@ -1537,6 +1595,7 @@
       </div>
     `);
 
+    applyCurSymbol(modalRoot);
     const listEl = document.getElementById("mc-list");
 
     enableRowDrag(listEl, (order) => {
@@ -1641,6 +1700,7 @@
 
   /* ---------- Spend view (log + list transactions) ---------- */
   function renderSpend(p) {
+    setCur(curOf(p));
     const sortOrder = state._spendSort === "oldest" ? "oldest" : "newest";
     const txns = [...p.transactions].sort((a, b) => {
       const cmp = (a.date + a.id).localeCompare(b.date + b.id);
@@ -1878,6 +1938,7 @@
   }
 
   function openSpendModal(p, presetCatId, editTxn, afterSave) {
+    setCur(curOf(p));
     const cats = p.categories;
     const editing = !!editTxn;
     let selectedCat =
@@ -1926,6 +1987,7 @@
       </div>
     `);
 
+    applyCurSymbol(modalRoot);
     const amountEl = document.getElementById("sp-amount");
     amountEl.addEventListener("input", () => clearFieldError(amountEl));
 
@@ -2075,6 +2137,7 @@
 
   /* ---------- New payday confirmation ---------- */
   function confirmNewPayday(p) {
+    setCur(curOf(p));
     const remaining = totalBudgeted(p) - totalSpent(p);
     const { close } = mountModal(`
       <div class="modal-overlay">
@@ -2111,7 +2174,9 @@
     // Compact export/share card (no full-text preview).
     if (!state._reportId || !periodsAll.some((p) => p.id === state._reportId)) state._reportId = periodsAll[0].id;
     const rptSel = periodsAll.find((p) => p.id === state._reportId);
+    setCur(curOf(rptSel));
     const rpt = buildReport(rptSel);
+    setCur(HOME_CUR);
     const canShare = typeof navigator !== "undefined" && !!navigator.share;
     const exportCard = `
       <div class="card">
@@ -2131,13 +2196,16 @@
 
     const closed = state.periods.filter((p) => p.closed).slice().reverse(); // newest first
     const hasHistory = closed.length > 0;
-    const n = closed.length;
-    const totalSaved = hasHistory ? totalSavedToDate() : 0;
-    const avgSaved = hasHistory ? closed.reduce((s, p) => s + periodSaved(p), 0) / n : 0;
-    const avgSpent = hasHistory ? closed.reduce((s, p) => s + totalSpent(p), 0) / n : 0;
+    // Money analytics only over home-currency (pay-period) budgets — can't sum mixed currencies.
+    const closedHome = closed.filter((p) => curOf(p) === HOME_CUR);
+    const nH = closedHome.length;
+    const hasHomeHistory = nH > 0;
+    const totalSaved = closedHome.reduce((s, p) => s + periodSaved(p), 0);
+    const avgSaved = nH ? totalSaved / nH : 0;
+    const avgSpent = nH ? closedHome.reduce((s, p) => s + totalSpent(p), 0) / nH : 0;
 
     // Savings per period — oldest→newest, most recent 8.
-    const chrono = closed.slice().reverse().slice(-8);
+    const chrono = closedHome.slice().reverse().slice(-8);
     const svals = chrono.map((p) => periodSaved(p));
     const smax = Math.max(1, ...svals.map((v) => Math.abs(v)));
     const chart = `<div class="savings-chart">${chrono
@@ -2160,9 +2228,9 @@
     );
     const topOver = Object.entries(overCount).sort((a, b) => b[1] - a[1]).slice(0, 3);
 
-    // Per-category spending averages across closed periods (closed is newest-first).
+    // Per-category spending averages across closed periods (home currency only).
     const catStats = {};
-    closed.forEach((p) =>
+    closedHome.forEach((p) =>
       p.categories.forEach((c) => {
         const key = `${c.emoji}||${c.name}`;
         const s = catStats[key] || (catStats[key] = { emoji: c.emoji, name: c.name, total: 0, count: 0, last: null });
@@ -2222,12 +2290,14 @@
 
     const items = closed
       .map((p) => {
+        setCur(curOf(p)); // format each row in its own currency
         const spent = totalSpent(p);
         const saved = periodSaved(p);
+        const vacTag = periodKind(p) === "vacation" ? ` · 🏖️ ${curOf(p)}` : "";
         return `
         <div class="hist-item" data-id="${p.id}">
           <div>
-            <div class="hist-date">${esc(fmtDateLong(p.startDate))}</div>
+            <div class="hist-date">${esc(fmtDateLong(p.startDate))}${vacTag}</div>
             <div class="hist-sub">Income ${fmt(periodIncome(p))} · spent ${fmt(spent)}</div>
           </div>
           <div class="hist-right">
@@ -2237,14 +2307,14 @@
         </div>`;
       })
       .join("");
+    setCur(HOME_CUR); // reset so the aggregate cards below use home currency
 
-    main.innerHTML =
-      (hasHistory
-        ? `
+    const analyticsCards = hasHomeHistory
+      ? `
       <div class="card">
         <div class="ins-label">Total saved to date</div>
         <div class="ins-amount ${totalSaved < 0 ? "neg" : ""}">${fmt(totalSaved)}</div>
-        <div class="ins-sub">across ${n} pay period${n === 1 ? "" : "s"} · avg ${fmt(avgSaved)} saved · ${fmt(avgSpent)} spent</div>
+        <div class="ins-sub">across ${nH} pay period${nH === 1 ? "" : "s"} · avg ${fmt(avgSaved)} saved · ${fmt(avgSpent)} spent</div>
       </div>
       <div class="card">
         <h2>Saved per period</h2>
@@ -2265,15 +2335,18 @@
       </div>`
           : ""
       }
-      ${patternsCard}
-      <div class="card">
+      ${patternsCard}`
+      : "";
+
+    const historyCard = hasHistory
+      ? `<div class="card">
         <h2>Past pay periods</h2>
         <p class="sub">Tap one to see the details.</p>
         ${items}
       </div>`
-        : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`) +
-      exportCard +
-      goalsCard;
+      : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`;
+
+    main.innerHTML = analyticsCards + historyCard + exportCard + goalsCard;
 
     document.getElementById("rp-period").addEventListener("change", (e) => { state._reportId = e.target.value; render(); });
     const rpShare = document.getElementById("rp-share");
@@ -2452,6 +2525,7 @@
   /* "Wrapped"-style recap card shown when a budget is closed (and re-openable
    * from History). Celebrates the period and offers a shareable summary. */
   function openRecapCard(p) {
+    setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
     const income = periodIncome(p);
     const spent = totalSpent(p);
@@ -2527,6 +2601,8 @@
   function openHistoryDetail(id) {
     const p = state.periods.find((x) => x.id === id);
     if (!p) return;
+    setCur(curOf(p));
+    applyCurSymbol(modalRoot);
     const spent = totalSpent(p);
     const catById = Object.fromEntries(p.categories.map((c) => [c.id, c]));
     // Re-render the History list and reopen this detail (used after an edit/delete).

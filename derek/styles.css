@@ -280,7 +280,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 
 .money-input { position: relative; }
 .money-input::before {
-  content: "$";
+  content: var(--cur-symbol, "$");
   position: absolute;
   left: 14px;
   top: 50%;
