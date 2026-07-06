@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "109";
+  const APP_VERSION = "110";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1336,7 +1336,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Expense Categories</h2>
           <div class="cat-head-actions">
-            <button class="btn btn-primary btn-sm" id="cat-log-spend">Log spend</button>
+            <button class="btn btn-primary btn-sm" id="cat-log-spend">Log Spend</button>
             <button class="icon-btn" id="manage-cats" aria-label="Manage categories" title="Manage categories"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="var(--surface-2)"/><circle cx="15" cy="12" r="2.4" fill="var(--surface-2)"/><circle cx="8" cy="17" r="2.4" fill="var(--surface-2)"/></svg></button>
           </div>
         </div>
