@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "96";
+  const APP_VERSION = "97";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -3062,9 +3062,10 @@
           <p class="footer-note" style="margin:8px 0 16px;">Restoring replaces everything currently in the app.</p>
 
           <div class="divider"></div>
-          <button class="btn btn-danger btn-block btn-sm" id="set-reset">Erase all data</button>
-          <button class="btn btn-ghost btn-block" id="set-close" style="margin-top:8px;">Close</button>
+          <button class="btn btn-ghost btn-block" id="set-close">Close</button>
           <p class="footer-note" style="margin-top:14px;">Version ${esc(APP_VERSION)}</p>
+          <div class="divider"></div>
+          <button class="btn btn-danger btn-block btn-sm" id="set-reset" style="margin-top:2px;">Erase all data</button>
         </div>
       </div>
     `);
