@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "99";
+  const APP_VERSION = "100";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1946,9 +1946,20 @@
     setCur(curOf(p));
     const cats = p.categories;
     const editing = !!editTxn;
+
+    // Prioritise what people actually log: discretionary categories first
+    // (most-recently-used leading); auto-logged fixed bills tuck behind a toggle.
+    const _lastUsed = {};
+    p.transactions.forEach((t) => { const d = t.date || ""; if (!_lastUsed[t.categoryId] || d > _lastUsed[t.categoryId]) _lastUsed[t.categoryId] = d; });
+    const discCats = cats.filter((c) => !c.fixed).sort((a, b) => (_lastUsed[b.id] || "").localeCompare(_lastUsed[a.id] || ""));
+    const fixedCats = cats.filter((c) => c.fixed);
+
     let selectedCat =
-      (editTxn && editTxn.categoryId) || presetCatId || cats[0].id;
+      (editTxn && editTxn.categoryId) || presetCatId || (discCats[0] ? discCats[0].id : cats[0].id);
     if (!cats.some((c) => c.id === selectedCat)) selectedCat = cats[0].id;
+    const selIsFixed = fixedCats.some((c) => c.id === selectedCat);
+    const spChip = (c, isFixed) =>
+      `<button type="button" class="chip${isFixed ? " sp-fixchip" : ""} ${c.id === selectedCat ? "active" : ""}" data-cat="${c.id}" aria-pressed="${c.id === selectedCat}"${isFixed && !selIsFixed ? " hidden" : ""}>${esc(c.emoji)} ${esc(c.name)}</button>`;
 
     const { close } = mountModal(`
       <div class="modal-overlay">
@@ -1968,12 +1979,9 @@
           <div class="field">
             <label>Category</label>
             <div class="chips" id="sp-chips" role="group" aria-label="Category">
-              ${cats
-                .map(
-                  (c) =>
-                    `<button type="button" class="chip ${c.id === selectedCat ? "active" : ""}" data-cat="${c.id}" aria-pressed="${c.id === selectedCat}">${esc(c.emoji)} ${esc(c.name)}</button>`
-                )
-                .join("")}
+              ${discCats.map((c) => spChip(c, false)).join("")}
+              ${fixedCats.length ? `<button type="button" class="chip chip-more" id="sp-morefixed"${selIsFixed ? " hidden" : ""}>＋ Fixed bills</button>` : ""}
+              ${fixedCats.map((c) => spChip(c, true)).join("")}
             </div>
           </div>
           <div class="field">
@@ -2006,6 +2014,12 @@
         c.setAttribute("aria-pressed", on);
       });
     });
+    const moreFixed = document.getElementById("sp-morefixed");
+    if (moreFixed)
+      moreFixed.addEventListener("click", () => {
+        modalRoot.querySelectorAll("#sp-chips .sp-fixchip").forEach((el) => (el.hidden = false));
+        moreFixed.hidden = true;
+      });
 
     const quickEl = document.getElementById("sp-quick");
     if (quickEl) {
