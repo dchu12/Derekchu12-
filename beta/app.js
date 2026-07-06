@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "108";
+  const APP_VERSION = "109";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1260,7 +1260,7 @@
         `<button type="button" class="fixed-summary ${fixedCollapsed ? "collapsed" : ""}" id="fixed-toggle" aria-expanded="${!fixedCollapsed}">
            <span class="ft-left">
              <span class="ft-icon" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="9.5" rx="2.5"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg></span>
-             <span class="ft-title">Fixed Bills</span>
+             <span class="ft-title">Total Fixed Bills</span>
              <span class="ft-count">${fixedCats.length}</span>
            </span>
            <span class="ft-right">
@@ -1270,9 +1270,12 @@
          </button>` +
         (fixedCollapsed ? "" : fixedCats.map(renderCat).join(""));
       if (spendCats.length) {
+        const discSpent = spendCats.reduce((s, c) => s + catSpent(p, c.id), 0);
+        const discBudgeted = spendCats.reduce((s, c) => s + Number(c.budgeted || 0), 0);
         cats +=
           `<div class="section-label cat-section-gap">Discretionary Spending</div>` +
-          spendCats.map(renderCat).join("");
+          spendCats.map(renderCat).join("") +
+          `<div class="disc-total"><span class="dt-label">Discretionary Spending Total</span><span class="dt-amt"><b>${fmt(discSpent)}</b> <span class="dt-of">of ${fmt(discBudgeted)}</span></span></div>`;
       }
     } else {
       cats = p.categories.map(renderCat).join("");
