@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "105";
+  const APP_VERSION = "106";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1330,17 +1330,9 @@
         ${cats}
       </div>
 
-      <button type="button" class="card income-card" id="income-manage" aria-label="Manage income">
-        <span class="ic-left">
-          <span class="ic-k">${isVac ? "Vacation fund + top-ups" : "Income this period"}</span>
-          <span class="ic-v">${fmt(periodIncome(p))}</span>
-        </span>
-        <span class="ic-caret" aria-hidden="true">›</span>
-      </button>
-
       <div class="card stat-card">
         <div class="stat-grid">
-          <div class="sstat"><div class="sk">Income</div><div class="sv">${fmt(periodIncome(p))}</div></div>
+          <button type="button" class="sstat sstat-tap" id="stat-income" aria-label="Manage income"><div class="sk">Income</div><div class="sv">${fmt(periodIncome(p))}</div></button>
           <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
           <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
         </div>
@@ -1352,8 +1344,8 @@
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     const catLog = document.getElementById("cat-log-spend");
     if (catLog) catLog.addEventListener("click", () => openSpendModal(p));
-    const incManage = document.getElementById("income-manage");
-    if (incManage) incManage.addEventListener("click", () => openIncomeManager(p));
+    const statIncome = document.getElementById("stat-income");
+    if (statIncome) statIncome.addEventListener("click", () => openIncomeManager(p));
     document.getElementById("new-payday").addEventListener("click", () => (isVac ? confirmEndVacation(p) : confirmNewPayday(p)));
     const ed = document.getElementById("edit-dates");
     if (ed) ed.addEventListener("click", () => openPeriodDates(p));
