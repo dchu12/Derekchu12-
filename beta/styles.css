@@ -168,6 +168,10 @@ body {
 .sstat { text-align: center; padding: 12px 8px 11px; background: var(--surface-2); border-radius: 12px; }
 .sk { font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
 .sv { font-size: 17px; font-weight: 800; color: var(--text); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+button.sstat { border: none; font: inherit; text-align: center; cursor: pointer; display: block; width: 100%; }
+.sstat-tap { background: var(--accent-soft); position: relative; }
+.sstat-tap::after { content: "›"; position: absolute; top: 5px; right: 8px; font-size: 13px; line-height: 1; font-weight: 800; color: var(--accent); }
+.sstat-tap:active { transform: scale(.98); }
 .sv.pos { color: var(--good); }
 .sv.neg { color: var(--danger); }
 .sv-emoji { font-size: 20px; }
