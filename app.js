@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "104";
+  const APP_VERSION = "105";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1340,9 +1340,9 @@
 
       <div class="card stat-card">
         <div class="stat-grid">
+          <div class="sstat"><div class="sk">Income</div><div class="sv">${fmt(periodIncome(p))}</div></div>
           <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
           <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
-          <div class="sstat"><div class="sk">${saved >= 0 ? "Saved" : "Over budget"}</div><div class="sv ${saved > 0.005 ? "pos" : saved < -0.005 ? "neg" : ""}">${fmt(Math.abs(saved))}</div></div>
         </div>
       </div>
 
