@@ -52,8 +52,8 @@ body {
 }
 .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .brand h1.wordmark {
-  font-size: 38px; font-weight: 800; letter-spacing: -0.035em; width: max-content;
-  transform: translateY(4px); /* optical: tall ¥ makes the word read high; nudge down to center with the buttons */
+  font-size: 42px; font-weight: 800; letter-spacing: -0.035em; width: max-content;
+  transform: translateY(-2px); /* nudged up a little per request; optical: tall ¥ makes the word read high; nudge down to center with the buttons */
   background: linear-gradient(120deg, #2aa6c4 0%, #2b62cf 55%, #1c39bb 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
