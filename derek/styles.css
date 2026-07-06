@@ -417,6 +417,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   color: var(--text);
 }
 .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.chip.chip-more { border-style: dashed; color: var(--text-dim); background: var(--surface); }
 
 /* Modal */
 #modal-root:empty { display: none; }
