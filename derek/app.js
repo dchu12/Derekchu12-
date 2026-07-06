@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "89";
+  const APP_VERSION = "90";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1795,6 +1795,63 @@
   }
 
   // editTxn: pass an existing transaction to edit it instead of adding a new one.
+  /* Light synonym map (keyed by lowercased category name) so quick-add can
+   * match everyday words to a category even when the name differs. */
+  const QUICK_SYNONYMS = {
+    groceries: ["grocery", "costco", "superstore", "loblaws", "supermarket", "walmart"],
+    restaurants: ["restaurant", "dinner", "lunch", "brunch"],
+    "take-out": ["takeout", "take out", "uber eats", "doordash", "skip"],
+    dining: ["dinner", "lunch", "restaurant", "brunch"],
+    "food & dining": ["food", "dinner", "lunch", "restaurant", "meal"],
+    coffee: ["starbucks", "cafe", "latte", "tims", "timmies", "espresso"],
+    gas: ["fuel", "petrol", "gasoline"],
+    transit: ["bus", "subway", "ttc", "metro", "train", "presto"],
+    transport: ["uber", "lyft", "taxi", "cab", "bus"],
+    "local transport": ["uber", "lyft", "taxi", "cab", "metro", "train"],
+    "ride-share": ["uber", "lyft", "taxi", "cab", "ride"],
+    shopping: ["amazon", "clothes", "mall", "store"],
+    entertainment: ["movie", "movies", "concert", "game", "spotify", "show"],
+    gym: ["fitness", "workout", "class"],
+    phone: ["cell", "mobile", "cellphone"],
+    internet: ["wifi", "isp"],
+    streaming: ["netflix", "spotify", "disney", "hulu", "prime", "crave"],
+    rent: ["mortgage", "landlord"],
+    flights: ["flight", "airfare", "plane", "airline"],
+    lodging: ["hotel", "airbnb", "motel", "hostel", "stay"],
+    activities: ["tour", "ticket", "tickets", "activity", "excursion", "museum"],
+    souvenirs: ["souvenir", "gift", "gifts", "keepsake"],
+  };
+
+  /* Parse a natural-language quick-add like "38 ramen" or "$12 coffee" into
+   * { amount, categoryId, note } using the period's own categories + synonyms. */
+  function parseQuickAdd(text, cats) {
+    const raw = String(text || "").trim();
+    if (!raw) return { amount: null, categoryId: null, note: "" };
+    const m = raw.match(/\d+(?:[.,]\d+)?/);
+    const amount = m ? Number(m[0].replace(",", ".")) : null;
+    let rest = raw;
+    if (m) rest = rest.slice(0, m.index) + " " + rest.slice(m.index + m[0].length);
+    rest = rest.replace(/\$/g, " ").replace(/\s+/g, " ").trim();
+    const restLc = rest.toLowerCase();
+    let best = null, bestScore = 0, bestHit = "";
+    for (const c of cats) {
+      const name = (c.name || "").toLowerCase();
+      const tokens = name.split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+      const candidates = tokens.concat(QUICK_SYNONYMS[name] || []);
+      for (const cand of candidates) {
+        if (cand && restLc.includes(cand) && cand.length > bestScore) {
+          bestScore = cand.length; best = c; bestHit = cand;
+        }
+      }
+    }
+    let note = rest;
+    if (bestHit) {
+      const safe = bestHit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      note = rest.replace(new RegExp(safe, "ig"), " ").replace(/\s+/g, " ").trim();
+    }
+    return { amount, categoryId: best ? best.id : null, note };
+  }
+
   function openSpendModal(p, presetCatId, editTxn, afterSave) {
     const cats = p.categories;
     const editing = !!editTxn;
@@ -1806,6 +1863,12 @@
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="${editing ? "Edit spending" : "Log spending"}">
           <h2>${editing ? "Edit spending" : "Log spending"}</h2>
+          ${editing ? "" : `
+          <div class="field quick-add-field">
+            <label for="sp-quick">⚡ Quick add</label>
+            <input id="sp-quick" placeholder="Type it — e.g. “38 ramen” or “12 coffee”" autocomplete="off" enterkeyhint="done" />
+            <div class="quick-hint" id="sp-quick-hint" aria-live="polite"></div>
+          </div>`}
           <div class="field money-input">
             <label for="sp-amount">Amount</label>
             <input id="sp-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01"
@@ -1851,6 +1914,44 @@
         c.setAttribute("aria-pressed", on);
       });
     });
+
+    const quickEl = document.getElementById("sp-quick");
+    if (quickEl) {
+      const hintEl = document.getElementById("sp-quick-hint");
+      const applyQuick = () => {
+        const parsed = parseQuickAdd(quickEl.value, cats);
+        if (parsed.amount != null && !Number.isNaN(parsed.amount)) {
+          amountEl.value = String(parsed.amount);
+          clearFieldError(amountEl);
+        }
+        if (parsed.categoryId) {
+          selectedCat = parsed.categoryId;
+          document.querySelectorAll("#sp-chips .chip").forEach((c) => {
+            const on = c.dataset.cat === selectedCat;
+            c.classList.toggle("active", on);
+            c.setAttribute("aria-pressed", on);
+          });
+        }
+        if (parsed.note) document.getElementById("sp-desc").value = parsed.note;
+        const cat = cats.find((c) => c.id === parsed.categoryId);
+        if (parsed.amount != null || cat) {
+          hintEl.innerHTML =
+            `→ ${parsed.amount != null ? "<b>" + esc(fmt(parsed.amount)) + "</b>" : "<span class='qh-dim'>amount?</span>"}` +
+            `${cat ? " · " + esc(cat.emoji) + " " + esc(cat.name) : " · <span class='qh-dim'>pick a category</span>"}`;
+        } else {
+          hintEl.innerHTML = "";
+        }
+      };
+      quickEl.addEventListener("input", applyQuick);
+      quickEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          applyQuick();
+          document.getElementById("sp-save").click();
+        }
+      });
+      setTimeout(() => { try { quickEl.focus(); } catch (e) {} }, 30);
+    }
 
     document.getElementById("sp-cancel").addEventListener("click", close);
 
