@@ -290,6 +290,16 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   z-index: 1;
 }
 .money-input input { padding-left: 26px; }
+
+/* Natural-language quick-add field in the Log spending modal */
+.quick-add-field label { color: var(--accent); }
+.quick-add-field input {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.quick-hint { min-height: 18px; margin-top: 6px; font-size: 13px; color: var(--text); }
+.quick-hint .qh-dim { color: var(--text-dim); font-weight: 400; }
 /* When the field has a label above the input, center the "$" on the input
    (not the whole field, which would sit it too high). Label box + half the
    input height ≈ 47.5px from the field top. */
