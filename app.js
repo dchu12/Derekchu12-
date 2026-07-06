@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "110";
+  const APP_VERSION = "111";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -304,9 +304,10 @@
   }
 
   // Month-by-month summary for the shared Results view (published to Firestore).
-  function computeResults() {
+  function computeResults(kind) {
     const months = {};
     state.periods.forEach((p) => {
+      if (kind && periodKind(p) !== kind) return; // scope to one budget type
       const mk = (p.startDate || "").slice(0, 7); // YYYY-MM
       if (!mk) return;
       const m = months[mk] || (months[mk] = { income: 0, budgeted: 0, spent: 0, cats: {} });
@@ -3049,27 +3050,28 @@
     return (names[Number(parts[1]) - 1] || "") + " " + parts[0];
   }
 
-  // Render the signed-in user's own monthly results from local data, with an
-  // invite to sign in for the combined household view.
-  function renderOwnResults(personCardFn) {
+  // Render the user's own monthly results from local data, scoped to one
+  // budget type (kind = "payday" | "vacation").
+  function renderOwnResults(personCardFn, kind) {
+    const isVac = kind === "vacation";
     const myName = PERSON_NAME;
-    const mine = computeResults();
+    const mine = computeResults(kind);
     if (!mine.months.length) {
-      main.innerHTML = `<div class="card"><h2>Your results</h2><p class="sub">Once you finish a pay period, each month's income, spending, and savings show up here.</p></div>`;
+      main.innerHTML = `<div class="card"><h2>${isVac ? "Vacation results" : "Your results"}</h2><p class="sub">${isVac ? "Once you log spending on a vacation budget, each trip's totals show up here." : "Once you finish a pay period, each month's income, spending, and savings show up here."}</p></div>`;
       return;
     }
     const sel = state._resultsMonth && mine.months.some((m) => m.month === state._resultsMonth) ? state._resultsMonth : mine.months[0].month;
     const m = mine.months.find((x) => x.month === sel) || mine.months[0];
     main.innerHTML = `
       <div class="card">
-        <h2>Your results</h2>
+        <h2>${isVac ? "Vacation results" : "Your results"}</h2>
         <div class="field" style="margin-bottom:10px;">
           <select id="rs-month">
             ${mine.months.map((mm) => `<option value="${mm.month}" ${mm.month === sel ? "selected" : ""}>${monthLabel(mm.month)}</option>`).join("")}
           </select>
         </div>
         <div class="rs-combined">Saved this month <b class="${m.saved >= 0 ? "rs-pos" : "rs-neg"}">${fmt(m.saved)}</b></div>
-        ${cloudOn() ? `<button class="btn btn-ghost btn-block btn-sm" id="rs-signin" style="margin-top:10px;">☁️ Sign in to compare with ${esc(PARTNER_NAME)}</button>` : ""}
+        ${!isVac && cloudOn() ? `<button class="btn btn-ghost btn-block btn-sm" id="rs-signin" style="margin-top:10px;">☁️ Sign in to compare with ${esc(PARTNER_NAME)}</button>` : ""}
       </div>
       ${personCardFn(myName, m)}`;
     const monthSel = document.getElementById("rs-month");
@@ -3106,9 +3108,17 @@
         </div>`;
     };
 
-    // Not synced (offline or signed out) → show your own results from local data.
+    // Results follow the top budget switcher. Vacation budgets are personal —
+    // always shown from local data, never in the shared household view.
+    const activeKind = state.activeBudget === "vacation" ? "vacation" : "payday";
+    if (activeKind === "vacation") {
+      renderOwnResults(personCard, "vacation");
+      return;
+    }
+    // Pay-period results: your own local when not synced, otherwise the shared
+    // (payday-only) combined view below.
     if (!cloudOn() || !cloudUser) {
-      renderOwnResults(personCard);
+      renderOwnResults(personCard, "payday");
       return;
     }
 
@@ -3372,7 +3382,7 @@
   }
 
   function publishOwnResults() {
-    if (cloudUser) Cloud.saveResults(BUDGET_KEY, computeResults());
+    if (cloudUser) Cloud.saveResults(BUDGET_KEY, computeResults("payday"));
   }
 
   // A remote budget doc arrived (initial load or the other person edited).
@@ -3427,7 +3437,7 @@
       updatedAt: state.updatedAt,
       updatedBy: currentEmail() || "",
     });
-    Cloud.saveResults(BUDGET_KEY, computeResults());
+    Cloud.saveResults(BUDGET_KEY, computeResults("payday"));
   }
 
   function schedulePush() {
