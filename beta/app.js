@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "91";
+  const APP_VERSION = "92";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1427,6 +1427,7 @@
       save();
       close();
       render();
+      openRecapCard(p); // celebrate the trip that just wrapped
     });
   }
 
@@ -2093,6 +2094,7 @@
       save();
       close();
       render(); // no active period -> setup flow appears
+      openRecapCard(p); // celebrate the period that just wrapped
     });
   }
 
@@ -2426,6 +2428,100 @@
     }
   }
 
+  /* Consecutive closed budgets of the same kind, ending at p, that finished in
+   * the green (saved > 0). Used for the recap "streak" line. */
+  function savingsStreak(p) {
+    const kind = periodKind(p);
+    const list = state.periods
+      .filter((x) => x.closed && periodKind(x) === kind)
+      .sort((a, b) =>
+        String(a.closedAt || a.createdAt || a.startDate).localeCompare(String(b.closedAt || b.createdAt || b.startDate))
+      );
+    const idx = list.findIndex((x) => x.id === p.id);
+    if (idx < 0) return periodSaved(p) > 0.005 ? 1 : 0;
+    let streak = 0;
+    for (let i = idx; i >= 0; i--) {
+      if (periodSaved(list[i]) > 0.005) streak++;
+      else break;
+    }
+    return streak;
+  }
+
+  /* "Wrapped"-style recap card shown when a budget is closed (and re-openable
+   * from History). Celebrates the period and offers a shareable summary. */
+  function openRecapCard(p) {
+    const isVac = periodKind(p) === "vacation";
+    const income = periodIncome(p);
+    const spent = totalSpent(p);
+    const budgeted = totalBudgeted(p);
+    const saved = periodSaved(p);
+    const rate = income > 0 ? Math.round((saved / income) * 100) : 0;
+    const positive = saved > 0.005;
+    let top = null, topAmt = 0;
+    p.categories.filter((c) => !c.fixed && !isSavingsCat(c)).forEach((c) => {
+      const cs = catSpent(p, c.id);
+      if (cs > topAmt) { topAmt = cs; top = c; }
+    });
+    const streak = savingsStreak(p);
+    const range = periodRangeLabel(p);
+    const unit = isVac ? "trips" : "periods";
+    const canShare = typeof navigator !== "undefined" && !!navigator.share;
+
+    const shareText =
+      `${isVac ? "🏖️ Vacation recap" : "🎉 Pay period recap"} (${range})\n` +
+      `${positive ? "Saved" : "Over by"}: ${fmt(Math.abs(saved))}${income > 0 && positive ? ` (${rate}% of income)` : ""}\n` +
+      `Spent ${fmt(spent)} of ${fmt(budgeted)} budgeted\n` +
+      (top ? `Top spend: ${top.emoji} ${top.name} ${fmt(topAmt)}\n` : "") +
+      (streak >= 2 ? `🔥 ${streak} ${unit} saved in a row\n` : "") +
+      `— via Yosan`;
+
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal recap-modal" role="dialog" aria-modal="true" aria-label="Recap">
+          <div class="recap-hero">
+            <div class="recap-eyebrow">${isVac ? "🏖️ Vacation recap" : "🎉 Pay period recap"}</div>
+            <div class="recap-range">${esc(range)}</div>
+            <div class="recap-big">${positive ? "" : "-"}${esc(fmt(Math.abs(saved)))}</div>
+            <div class="recap-cap">${positive ? `saved${income > 0 ? " · " + rate + "% of income" : ""}` : "over budget"}</div>
+          </div>
+          <div class="recap-stats">
+            <div class="recap-stat"><div class="rs-k">Budgeted</div><div class="rs-v">${esc(fmt(budgeted))}</div></div>
+            <div class="recap-stat"><div class="rs-k">Spent</div><div class="rs-v">${esc(fmt(spent))}</div></div>
+            <div class="recap-stat"><div class="rs-k">${positive ? "Saved" : "Over"}</div><div class="rs-v ${positive ? "pos" : "neg"}">${esc(fmt(Math.abs(saved)))}</div></div>
+          </div>
+          ${top ? `<div class="recap-line">🏅 Top spend — <b>${esc(top.emoji)} ${esc(top.name)}</b> at ${esc(fmt(topAmt))}</div>` : ""}
+          ${
+            streak >= 2
+              ? `<div class="recap-line">🔥 <b>${streak} ${unit} in a row</b> in the green — keep the streak alive!</div>`
+              : positive
+              ? `<div class="recap-line">🌱 That's real money set aside for future-you. Nicely done.</div>`
+              : `<div class="recap-line">💪 Fresh start next ${isVac ? "trip" : "period"} — you've got this.</div>`
+          }
+          ${canShare ? `<button class="btn btn-primary btn-block" id="rc-share">📤 Share recap</button>` : ""}
+          <div class="field-row" style="margin-top:10px;">
+            <button class="btn btn-ghost" id="rc-copy" style="flex:1;">📋 Copy</button>
+            <button class="btn btn-ghost" id="rc-done" style="flex:1;">Done</button>
+          </div>
+        </div>
+      </div>
+    `);
+    document.getElementById("rc-done").addEventListener("click", close);
+    const sh = document.getElementById("rc-share");
+    if (sh) sh.addEventListener("click", async () => { try { await navigator.share({ text: shareText }); } catch (e) {} });
+    document.getElementById("rc-copy").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      try {
+        await navigator.clipboard.writeText(shareText);
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = shareText; document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); } catch {}
+        document.body.removeChild(ta);
+      }
+      const o = btn.textContent; btn.textContent = "✓ Copied"; setTimeout(() => (btn.textContent = o), 1500);
+    });
+  }
+
   function openHistoryDetail(id) {
     const p = state.periods.find((x) => x.id === id);
     if (!p) return;
@@ -2476,6 +2572,7 @@
         <div class="modal" role="dialog" aria-modal="true" aria-label="Pay period details">
           <h2>${esc(fmtDateLong(p.startDate))}</h2>
           <p class="sub">Paid ${fmt(p.paycheckAmount)} · ${freqLabel(p.frequency)} · spent ${fmt(spent)}</p>
+          <button class="btn btn-ghost btn-block btn-sm" id="hist-recap" style="margin:0 0 12px;">🎉 View recap</button>
           ${catSummary}
           <div class="divider"></div>
           <div class="section-label" style="display:flex;justify-content:space-between;align-items:center;">
@@ -2492,6 +2589,7 @@
     `);
 
     document.getElementById("hist-close").addEventListener("click", close);
+    document.getElementById("hist-recap").addEventListener("click", () => openRecapCard(p));
     document.getElementById("hist-add").addEventListener("click", () => openSpendModal(p, null, null, reopen));
     modalRoot.querySelectorAll("[data-edit]").forEach((btn) =>
       btn.addEventListener("click", () => {
