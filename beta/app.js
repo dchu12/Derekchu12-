@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "107";
+  const APP_VERSION = "108";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1974,7 +1974,7 @@
         ${topCats.length ? `<div class="ss-top">
           <div class="ss-top-label">Top discretionary spending</div>
           <div class="dn-wrap">
-            <div class="dn-chart"><svg viewBox="0 0 42 42" aria-hidden="true"><circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--surface-2)" stroke-width="5"></circle>${donutArcs}</svg></div>
+            <div class="dn-chart"><svg viewBox="0 0 42 42" aria-hidden="true"><circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--surface-2)" stroke-width="5"></circle>${donutArcs}<text x="21" y="21.5" text-anchor="middle" dominant-baseline="central" class="dn-dollar">$</text></svg></div>
             <div class="dn-legend">${donutLegend}</div>
           </div>
         </div>` : ""}
