@@ -485,6 +485,19 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .btn-payday { background: transparent; border: 1.5px solid var(--accent); color: var(--accent); font-weight: 700; }
 .btn-payday:active { background: var(--accent-soft); }
 
+/* Quick add sheet — tappable action rows (redesigned) */
+.quick-add .sub { margin-bottom: 14px; }
+.qa-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 6px; }
+.qa-action { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; padding: 13px 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); cursor: pointer; transition: border-color .12s, background .12s, transform .04s; }
+.qa-action:hover { border-color: var(--accent); background: var(--accent-soft); }
+.qa-action:active { transform: scale(.99); }
+.qa-ico { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.qa-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.qa-t { font-size: 15px; font-weight: 700; color: var(--text); }
+.qa-d { font-size: 12.5px; color: var(--text-dim); line-height: 1.35; }
+.qa-chev { flex: none; font-size: 24px; line-height: 1; color: var(--text-dim); font-weight: 300; }
+.quick-add #qa-cancel { margin-top: 8px; }
+
 /* Overspend patterns */
 .ov-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .ov-item:last-child { border-bottom: none; }
