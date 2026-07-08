@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "114";
+  const APP_VERSION = "115";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -1277,7 +1277,7 @@
           `<button type="button" class="fixed-summary disc-summary ${discCollapsed ? "collapsed" : ""}" id="disc-toggle" aria-expanded="${!discCollapsed}">
              <span class="ft-left">
                <span class="ft-icon" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 11.5a1.5 1.5 0 0 1-1.5 1.5H7.5A1.5 1.5 0 0 1 6 19.5z"></path><path d="M9 8V6.5a3 3 0 0 1 6 0V8"></path></svg></span>
-               <span class="ft-title">Total Discretionary Spending</span>
+               <span class="ft-title">Total Discretionary</span>
                <span class="ft-count">${spendCats.length}</span>
              </span>
              <span class="ft-right">
