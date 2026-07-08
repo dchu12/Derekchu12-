@@ -579,6 +579,7 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   cursor: pointer; color: var(--text); font: inherit; text-align: left;
   transition: transform 0.05s;
 }
+.disc-summary { margin-top: 6px; }
 .fixed-summary:active { transform: scale(0.99); }
 .fixed-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ft-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
