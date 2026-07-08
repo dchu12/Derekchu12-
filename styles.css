@@ -40,9 +40,9 @@ body {
   top: 0;
   z-index: 10;
   background: var(--bg);
-  padding: 18px 0 10px;
+  padding: 11px 0 7px;
 }
-.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 0; }
 .brand .logo {
   display: flex; align-items: center; justify-content: center;
   width: 40px; height: 40px; flex: 0 0 40px;
@@ -52,8 +52,8 @@ body {
 }
 .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 .brand h1.wordmark {
-  font-size: 42px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; width: max-content;
-  transform: translateY(-2px); /* nudged up a little per request; optical: tall ¥ makes the word read high; nudge down to center with the buttons */
+  font-size: 25px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; width: max-content;
+  transform: none;
   background: linear-gradient(120deg, #2aa6c4 0%, #2b62cf 55%, #1c39bb 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
@@ -74,17 +74,22 @@ body {
 }
 .tab {
   flex: 1;
-  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
   border: none;
   background: transparent;
   color: var(--text-dim);
-  font-size: 12.5px;
+  font-size: 11px;
   font-weight: 700;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
 }
+.tab-ico { width: 22px; height: 22px; flex: 0 0 auto; }
 .tab.active { background: var(--accent-soft); color: var(--accent); }
 
 /* Budget switcher (Pay Period / Vacation) — shown only in Vacation Mode */
