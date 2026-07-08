@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "113";
+  const APP_VERSION = "114";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -1256,6 +1256,7 @@
     const fixedCats = p.categories.filter((c) => c.fixed);
     const spendCats = p.categories.filter((c) => !c.fixed);
     const fixedCollapsed = !!state.fixedCollapsed;
+    const discCollapsed = !!state.discCollapsed;
     const fixedBudgeted = fixedCats.reduce((s, c) => s + Number(c.budgeted), 0);
     let cats;
     if (fixedCats.length) {
@@ -1274,11 +1275,19 @@
         (fixedCollapsed ? "" : fixedCats.map(renderCat).join(""));
       if (spendCats.length) {
         const discSpent = spendCats.reduce((s, c) => s + catSpent(p, c.id), 0);
-        const discBudgeted = spendCats.reduce((s, c) => s + Number(c.budgeted || 0), 0);
         cats +=
-          `<div class="section-label cat-section-gap">Discretionary Spending</div>` +
-          spendCats.map(renderCat).join("") +
-          `<div class="disc-total"><span class="dt-label">Discretionary Spending Total</span><span class="dt-amt"><b>${fmt(discSpent)}</b> <span class="dt-of">of ${fmt(discBudgeted)}</span></span></div>`;
+          `<button type="button" class="fixed-summary disc-summary ${discCollapsed ? "collapsed" : ""}" id="disc-toggle" aria-expanded="${!discCollapsed}">
+             <span class="ft-left">
+               <span class="ft-icon" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 11.5a1.5 1.5 0 0 1-1.5 1.5H7.5A1.5 1.5 0 0 1 6 19.5z"></path><path d="M9 8V6.5a3 3 0 0 1 6 0V8"></path></svg></span>
+               <span class="ft-title">Total Discretionary Spending</span>
+               <span class="ft-count">${spendCats.length}</span>
+             </span>
+             <span class="ft-right">
+               <span class="ft-amt">${fmt(discSpent)}</span>
+               <span class="ft-caret" aria-hidden="true">›</span>
+             </span>
+           </button>` +
+          (discCollapsed ? "" : spendCats.map(renderCat).join(""));
       }
     } else {
       cats = p.categories.map(renderCat).join("");
@@ -1370,6 +1379,13 @@
     if (ft)
       ft.addEventListener("click", () => {
         state.fixedCollapsed = !state.fixedCollapsed;
+        save();
+        render();
+      });
+    const dt = document.getElementById("disc-toggle");
+    if (dt)
+      dt.addEventListener("click", () => {
+        state.discCollapsed = !state.discCollapsed;
         save();
         render();
       });
