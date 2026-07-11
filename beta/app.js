@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "115";
+  const APP_VERSION = "116";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -2080,8 +2080,10 @@
   function parseQuickAdd(text, cats) {
     const raw = String(text || "").trim();
     if (!raw) return { amount: null, categoryId: null, note: "" };
-    const m = raw.match(/\d+(?:[.,]\d+)?/);
-    const amount = m ? Number(m[0].replace(",", ".")) : null;
+    // Grab a number that may use commas as thousands separators (en-US),
+    // e.g. "1,000" or "1,234.56"; fall back to a plain/decimal number.
+    const m = raw.match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/);
+    const amount = m ? Number(m[0].replace(/,/g, "")) : null;
     let rest = raw;
     if (m) rest = rest.slice(0, m.index) + " " + rest.slice(m.index + m[0].length);
     rest = rest.replace(/\$/g, " ").replace(/\s+/g, " ").trim();
