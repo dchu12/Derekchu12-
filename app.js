@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "117";
+  const APP_VERSION = "118";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -3219,6 +3219,47 @@
     } catch (e) {}
   }
 
+  // Build a spreadsheet-friendly CSV of every logged transaction (pure/testable).
+  function transactionsCSV(st) {
+    const q = (v) => {
+      const s = String(v == null ? "" : v);
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const rows = [["Date", "Category", "Amount", "Note", "Period start", "Budget type", "Fixed bill"]];
+    let count = 0;
+    ((st && st.periods) || []).forEach((p) => {
+      const byId = {};
+      (p.categories || []).forEach((c) => { byId[c.id] = c; });
+      const kind = p.kind === "vacation" ? "Vacation" : "Payday";
+      (p.transactions || [])
+        .slice()
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+        .forEach((t) => {
+          const c = byId[t.categoryId] || {};
+          const name = ((c.emoji ? c.emoji + " " : "") + (c.name || "Uncategorized")).trim();
+          rows.push([t.date || "", name, Number(t.amount || 0), t.description || "", p.startDate || "", kind, c.fixed ? "yes" : "no"]);
+          count++;
+        });
+    });
+    return { csv: rows.map((r) => r.map(q).join(",")).join("\r\n"), count };
+  }
+
+  // Export the transactions CSV as a download.
+  function exportCSV() {
+    const { csv, count } = transactionsCSV(state);
+    if (!count) { showToast("No transactions to export yet."); return; }
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `yosan-transactions-${todayISO()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Exported ${count} transaction${count === 1 ? "" : "s"} ✓`);
+  }
+
   // Human-friendly "last backup" line for Settings.
   function lastBackupLabel() {
     const ts = Number(localStorage.getItem(STORAGE_KEY + "-lastbackup") || 0);
@@ -3307,6 +3348,7 @@
             <input type="file" id="set-import-file" accept="application/json,.json" style="position:absolute;width:1px;height:1px;opacity:0;" />
           </div>
           <p class="footer-note" style="margin:8px 0 0;">${esc(lastBackupLabel())} · saves a <code>.json</code> you can keep or move to another device. Restoring replaces everything here.</p>
+          <button class="btn btn-ghost btn-block btn-sm" id="set-export-csv" style="margin-top:10px;">📄 Export transactions (CSV)</button>
 
           <button class="btn btn-ghost btn-block" id="set-close" style="margin-top:22px;">Close</button>
           <p class="set-version">Version ${esc(APP_VERSION)} · ${periods} pay period${periods === 1 ? "" : "s"} · ${txns} transaction${txns === 1 ? "" : "s"}</p>
@@ -3348,6 +3390,7 @@
       });
 
     document.getElementById("set-export").addEventListener("click", exportData);
+    document.getElementById("set-export-csv").addEventListener("click", exportCSV);
 
     document.getElementById("set-import-file").addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
@@ -3882,6 +3925,18 @@
       const p = activePeriod();
       if (p) openQuickAdd(p);
     });
+
+  // Test-only hook: exposes pure helpers to the Node/jsdom test harness.
+  // Never read by app code, so it has no effect on the running app.
+  if (typeof window !== "undefined") {
+    window.__yosanTest = {
+      parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
+      mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
+      transactionsCSV,
+      setState: (s) => { state = s; },
+      getState: () => state,
+    };
+  }
 
   /* Boot */
   render();

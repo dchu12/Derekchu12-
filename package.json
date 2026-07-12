@@ -1,0 +1,15 @@
+{
+  "name": "yosan",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Yosan — payday budgeting PWA (vanilla JS, no framework).",
+  "type": "module",
+  "scripts": {
+    "test": "node test/run.mjs",
+    "build": "node build/build.mjs",
+    "build:check": "node build/build.mjs --check"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}
