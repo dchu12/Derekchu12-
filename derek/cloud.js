@@ -104,6 +104,62 @@
       if (!ready) return Promise.resolve();
       return resultsDoc(key).set(payload).catch(function () {});
     },
+
+    /* ---- User directory (roles / admin) ------------------------------ *
+     * Every signed-in user publishes a small profile to `users/{uid}` so an
+     * admin can enumerate accounts. Admin-only fields (disabled) are written
+     * by the admin; the security rules stop a user from setting their own. */
+    saveUser: function (uid, payload) {
+      if (!ready || !uid) return Promise.resolve();
+      return db.collection("users").doc(uid).set(payload, { merge: true }).catch(function () {});
+    },
+    watchUser: function (uid, cb) {
+      if (!ready || !uid) return function () {};
+      return db.collection("users").doc(uid).onSnapshot(
+        function (snap) { cb(snap.exists ? snap.data() : null); },
+        function () {}
+      );
+    },
+    watchUsers: function (cb) {
+      // Admin-only in practice (rules gate the collection read).
+      if (!ready) return function () {};
+      return db.collection("users").onSnapshot(
+        function (snap) {
+          var out = [];
+          snap.forEach(function (d) { out.push(d.data()); });
+          cb(out);
+        },
+        function () { cb([]); }
+      );
+    },
+    updateUser: function (uid, patch) {
+      if (!ready || !uid) return Promise.reject(new Error("offline"));
+      return db.collection("users").doc(uid).set(patch, { merge: true });
+    },
+    // One-shot reads so an admin can inspect another account's budget/results.
+    getBudget: function (key) {
+      if (!ready) return Promise.resolve(null);
+      return budgetDoc(key).get().then(function (s) { return s.exists ? s.data() : null; }).catch(function () { return null; });
+    },
+    getResults: function (key) {
+      if (!ready) return Promise.resolve(null);
+      return resultsDoc(key).get().then(function (s) { return s.exists ? s.data() : null; }).catch(function () { return null; });
+    },
+
+    /* ---- App config: feature flags + broadcast banner ---------------- *
+     * `app/config` is world-readable (so even signed-out visitors see a
+     * broadcast) but admin-only writable. */
+    watchConfig: function (cb) {
+      if (!ready) return function () {};
+      return db.collection("app").doc("config").onSnapshot(
+        function (snap) { cb(snap.exists ? snap.data() : null); },
+        function () {}
+      );
+    },
+    saveConfig: function (payload) {
+      if (!ready) return Promise.reject(new Error("offline"));
+      return db.collection("app").doc("config").set(payload, { merge: true });
+    },
   };
 
   window.Cloud = Cloud;

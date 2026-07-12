@@ -11,12 +11,16 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "116";
+  const APP_VERSION = "117";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
   const PERSON_NAME = "You";
   const PARTNER_NAME = "Partner";
+
+  // The one account with admin powers (user directory, app controls). Roles are
+  // enforced server-side by Firestore rules; the client only reveals admin UI.
+  const ADMIN_EMAIL = "derekchu12@gmail.com";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -66,6 +70,15 @@
   let resultsUnsub = [];  // realtime results listeners (both people)
   const resultsCache = { kelly: null, derek: null }; // latest results docs
   let resultsSeeded = false; // publish our results summary once after first sync
+  // Roles + app config (feature flags / broadcast). All optional; the app is
+  // fully usable signed out or when Firebase isn't available.
+  let appConfig = null;        // latest app/config doc, or null
+  let configUnsub = null;      // app/config listener unsubscribe
+  let usersCache = [];         // admin: directory of all signed-in accounts
+  let usersUnsub = null;       // admin: users collection listener
+  let selfUserUnsub = null;    // watch our own users/{uid} doc (honor admin disable)
+  let accountDisabled = false; // set true if an admin disables this account
+  let adminPanelRefresh = null;// re-render hook while the admin panel is open
   // Data-safety banner: stays dismissed for 30 days once closed (persisted), so it doesn't nag.
   let bannerDismissed =
     Date.now() - Number(localStorage.getItem(STORAGE_KEY + "-banner-dismissed") || 0) < 30 * 86400000;
@@ -758,6 +771,7 @@
   }
 
   function render() {
+    if (accountDisabled) return renderDisabled();
     setCur(HOME_CUR); // default; period views set their own currency below
     // "History" and "Report" are now one combined "Reports" tab.
     if (state.view === "history") state.view = "report";
@@ -2130,7 +2144,7 @@
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="${editing ? "Edit spending" : "Log spending"}">
           <h2>${editing ? "Edit spending" : "Log spending"}</h2>
-          ${editing ? "" : `
+          ${editing || !flagOn("quickAdd", true) ? "" : `
           <div class="field quick-add-field">
             <label for="sp-quick">⚡ Quick add</label>
             <input id="sp-quick" placeholder="Type it — e.g. “38 ramen” or “12 coffee”" autocomplete="off" enterkeyhint="done" />
@@ -3248,12 +3262,17 @@
       : cloudUser
       ? `<div class="section-label set-sec">Account</div>
          <div class="set-status">
-           <span class="set-status-txt">☁️ Synced as ${esc(currentEmail())}</span>
+           <span class="set-status-txt">☁️ Synced as ${esc(currentEmail())}<span class="role-badge role-${currentRole()}">${esc(roleLabel(currentRole()))}</span></span>
            <button class="btn btn-ghost btn-xs" id="set-signout">Sign out</button>
          </div>`
       : `<div class="section-label set-sec">Account</div>
          <button class="btn btn-primary btn-block" id="set-signin">☁️ Sign in to sync</button>
-         <p class="footer-note" style="margin:6px 0 0;">Sync across devices and share monthly results.</p>`;
+         <p class="footer-note" style="margin:6px 0 0;">You're browsing as <b>Guest</b> — sign in to sync across devices and share monthly results.</p>`;
+    const adminBlock = isAdmin()
+      ? `<div class="section-label set-sec">Admin</div>
+         <button class="btn btn-primary btn-block" id="set-admin">🛠️ Open admin panel</button>
+         <p class="footer-note" style="margin:6px 0 0;">Manage users, view accounts, broadcast a message, and toggle features.</p>`
+      : "";
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
@@ -3262,7 +3281,9 @@
 
           ${cloudBlock}
 
-          <div class="section-label set-sec">Preferences</div>
+          ${adminBlock}
+
+          ${flagOn("vacationMode", true) ? `<div class="section-label set-sec">Preferences</div>
           <div class="vac-row">
             <div class="vac-copy">
               <div class="vac-title">🏖️ Vacation Mode</div>
@@ -3272,7 +3293,7 @@
               <input type="checkbox" id="set-vacation" ${state.vacationMode ? "checked" : ""} />
               <span class="switch-track" aria-hidden="true"></span>
             </label>
-          </div>
+          </div>` : ""}
 
           <div class="section-label set-sec">Your data</div>
           <div class="field-row">
@@ -3303,6 +3324,12 @@
         Cloud.signOut();
         close();
         showToast("Signed out — syncing off");
+      });
+    const adminBtn = document.getElementById("set-admin");
+    if (adminBtn)
+      adminBtn.addEventListener("click", () => {
+        close();
+        openAdminPanel();
       });
 
     const vacToggle = document.getElementById("set-vacation");
@@ -3347,18 +3374,306 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Admin panel (only shown to ADMIN_EMAIL; Firestore rules enforce it).
+   * ------------------------------------------------------------------ */
+  // Flags the admin can toggle app-wide. Each is honored via flagOn(key).
+  const ADMIN_FLAGS = [
+    { key: "quickAdd", label: "Quick add (natural-language spend)", dflt: true },
+    { key: "vacationMode", label: "Vacation Mode available", dflt: true },
+  ];
+
+  function admRelTime(ts) {
+    const s = Math.max(0, Math.floor((Date.now() - Number(ts || 0)) / 1000));
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + "h ago";
+    const d = Math.floor(h / 24);
+    if (d < 30) return d + "d ago";
+    return Math.floor(d / 30) + "mo ago";
+  }
+
+  function openAdminPanel() {
+    if (!isAdmin()) return;
+    const bTxt = (appConfig && appConfig.banner && appConfig.banner.text) || "";
+    const bOn = !!(appConfig && appConfig.banner && appConfig.banner.active);
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal admin-modal" role="dialog" aria-modal="true" aria-label="Admin panel">
+          <h2>🛠️ Admin</h2>
+          <p class="sub">Signed in as ${esc(currentEmail())} · full access.</p>
+
+          <div class="section-label set-sec">📢 Broadcast</div>
+          <div class="field">
+            <textarea id="adm-banner" rows="2" placeholder="A short message shown to everyone at the top of the app…">${esc(bTxt)}</textarea>
+          </div>
+          <div class="adm-ctl-row">
+            <label class="switch"><input type="checkbox" id="adm-banner-on" ${bOn ? "checked" : ""} /><span class="switch-track" aria-hidden="true"></span></label>
+            <span class="adm-ctl-lbl">Show banner to everyone</span>
+            <button class="btn btn-primary btn-sm" id="adm-banner-save">Save</button>
+          </div>
+
+          <div class="section-label set-sec">Feature flags</div>
+          <div id="adm-flags"></div>
+
+          <div class="section-label set-sec">Users <span id="adm-usercount" class="adm-count"></span></div>
+          <div id="adm-users" class="adm-users"></div>
+
+          <button class="btn btn-ghost btn-block" id="adm-close" style="margin-top:18px;">Close</button>
+        </div>
+      </div>
+    `);
+
+    const done = () => { adminPanelRefresh = null; close(); };
+    document.getElementById("adm-close").addEventListener("click", done);
+
+    // Broadcast save
+    document.getElementById("adm-banner-save").addEventListener("click", () => {
+      const text = document.getElementById("adm-banner").value.trim();
+      const active = document.getElementById("adm-banner-on").checked;
+      Cloud.saveConfig({ banner: { text, active }, updatedAt: Date.now(), updatedBy: currentEmail() || "" })
+        .then(() => showToast(active && text ? "Broadcast on 📢" : "Broadcast cleared"))
+        .catch(() => showToast("Couldn't save — check connection/rules."));
+    });
+
+    // Feature-flag toggles
+    const flagsHost = document.getElementById("adm-flags");
+    flagsHost.innerHTML = ADMIN_FLAGS.map((f) =>
+      `<div class="adm-ctl-row">
+         <label class="switch"><input type="checkbox" data-flag="${esc(f.key)}" ${flagOn(f.key, f.dflt) ? "checked" : ""} /><span class="switch-track" aria-hidden="true"></span></label>
+         <span class="adm-ctl-lbl">${esc(f.label)}</span>
+       </div>`).join("");
+    flagsHost.addEventListener("change", (e) => {
+      const cb = e.target.closest("[data-flag]");
+      if (!cb) return;
+      const patch = { flags: {} };
+      patch.flags[cb.dataset.flag] = cb.checked;
+      Cloud.saveConfig(patch)
+        .then(() => showToast("Saved ✓"))
+        .catch(() => { cb.checked = !cb.checked; showToast("Couldn't save — check connection/rules."); });
+    });
+
+    // Live users directory
+    const usersHost = document.getElementById("adm-users");
+    const countEl = document.getElementById("adm-usercount");
+    const paintUsers = () => {
+      if (!document.body.contains(usersHost)) { adminPanelRefresh = null; return; }
+      countEl.textContent = usersCache.length ? "· " + usersCache.length : "";
+      if (!usersCache.length) {
+        usersHost.innerHTML = `<p class="footer-note">No accounts yet. Users appear here once they sign in.</p>`;
+        return;
+      }
+      usersHost.innerHTML = usersCache.map((u) => {
+        const me = cloudUser && u.uid === cloudUser.uid;
+        const when = u.lastActive ? admRelTime(u.lastActive) : "—";
+        return `
+          <div class="adm-user ${u.disabled ? "is-disabled" : ""}">
+            <div class="adm-user-main">
+              <div class="adm-user-name">${esc(u.name || u.email || "User")}<span class="role-badge role-${esc(u.role || "user")}">${esc(roleLabel(u.role))}</span>${u.disabled ? '<span class="adm-tag">paused</span>' : ""}</div>
+              <div class="adm-user-sub">${esc(u.email || "")} · ${esc(u.deployment || "")} · ${esc(when)}</div>
+            </div>
+            <div class="adm-user-actions">
+              <button class="btn btn-ghost btn-xs" data-uview="${esc(u.budgetKey || "")}">View</button>
+              ${me ? "" : `<button class="btn btn-ghost btn-xs" data-utoggle="${esc(u.uid)}">${u.disabled ? "Enable" : "Pause"}</button>`}
+            </div>
+          </div>`;
+      }).join("");
+    };
+    paintUsers();
+    adminPanelRefresh = paintUsers;
+
+    usersHost.addEventListener("click", (e) => {
+      const v = e.target.closest("[data-uview]");
+      if (v) { openAdminUserView(v.dataset.uview); return; }
+      const t = e.target.closest("[data-utoggle]");
+      if (t) {
+        const u = usersCache.find((x) => x.uid === t.dataset.utoggle);
+        if (!u) return;
+        const next = !u.disabled;
+        if (next && !confirm(`Pause ${u.name || u.email}? They'll be locked out of the app until you re-enable them. Their data stays safe.`)) return;
+        Cloud.updateUser(u.uid, { disabled: next })
+          .then(() => showToast(next ? "Account paused" : "Account enabled"))
+          .catch(() => showToast("Couldn't update — check connection/rules."));
+      }
+    });
+  }
+
+  // Read-only summary of another account's published budget + results.
+  function renderAdminUserSummary(budget, results) {
+    const data = budget && budget.data;
+    if (!data || !Array.isArray(data.periods) || !data.periods.length) {
+      return `<p class="footer-note">No budget data published yet.</p>`;
+    }
+    const periods = data.periods;
+    const openP = periods.slice().reverse().find((p) => !p.closed && p.kind !== "vacation") || periods[periods.length - 1];
+    const cats = openP.categories || [];
+    const txns = openP.transactions || [];
+    const budgeted = cats.reduce((s, c) => s + Number(c.budgeted || 0), 0);
+    const spent = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
+    const income = Number(openP.paycheckAmount || 0) + (openP.extraIncome || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+    const left = budgeted - spent;
+    const catRows = cats.map((c) => {
+      const cs = txns.filter((t) => t.categoryId === c.id).reduce((s, t) => s + Number(t.amount || 0), 0);
+      return `<div class="adm-catrow"><span>${esc(c.emoji || "")} ${esc(c.name || "")}</span><span>${esc(fmt(cs))} / ${esc(fmt(Number(c.budgeted || 0)))}</span></div>`;
+    }).join("");
+    const months = (results && results.months) || [];
+    const updated = budget && budget.updatedAt ? admRelTime(budget.updatedAt) : "—";
+    return `
+      <div class="adm-stats">
+        <div class="adm-stat"><div class="sk">Left</div><div class="sv">${esc(fmt(left))}</div></div>
+        <div class="adm-stat"><div class="sk">Income</div><div class="sv">${esc(fmt(income))}</div></div>
+        <div class="adm-stat"><div class="sk">Budgeted</div><div class="sv">${esc(fmt(budgeted))}</div></div>
+        <div class="adm-stat"><div class="sk">Spent</div><div class="sv">${esc(fmt(spent))}</div></div>
+      </div>
+      <p class="footer-note">Current period · ${cats.length} categories · ${txns.length} logged · updated ${esc(updated)}</p>
+      <div class="section-label set-sec">Categories</div>
+      ${catRows || '<p class="footer-note">No categories.</p>'}
+      <div class="section-label set-sec">Shared results</div>
+      <p class="footer-note">${months.length} month${months.length === 1 ? "" : "s"} on record.</p>
+    `;
+  }
+
+  function openAdminUserView(budgetKey) {
+    if (!isAdmin() || !budgetKey) return;
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="User budget">
+          <h2>👤 ${esc(budgetKey)}</h2>
+          <div id="auv-body"><p class="sub">Loading…</p></div>
+          <button class="btn btn-ghost btn-block" id="auv-close" style="margin-top:16px;">Close</button>
+        </div>
+      </div>
+    `);
+    document.getElementById("auv-close").addEventListener("click", close);
+    Promise.all([Cloud.getBudget(budgetKey), Cloud.getResults(budgetKey)]).then(([budget, results]) => {
+      const body = document.getElementById("auv-body");
+      if (body) body.innerHTML = renderAdminUserSummary(budget, results);
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
    * Cloud sync (Firebase) — optional; app works fully without it.
    * ------------------------------------------------------------------ */
   const cloudOn = () => !!(window.Cloud && Cloud.available);
   const currentEmail = () => (cloudUser && cloudUser.email ? cloudUser.email : null);
 
+  /* ---- Roles ---------------------------------------------------------- *
+   * guest = not signed in (local only) · user = signed in (syncs their budget)
+   * admin = signed in as ADMIN_EMAIL (user directory + app controls).
+   * The client only reveals admin UI; Firestore rules do the real enforcing. */
+  const isAdminEmail = (e) => !!e && String(e).toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  function currentRole() {
+    if (!cloudUser) return "guest";
+    return isAdminEmail(cloudUser.email) ? "admin" : "user";
+  }
+  const isAdmin = () => currentRole() === "admin";
+  const roleLabel = (r) => (r === "admin" ? "Admin" : r === "user" ? "Member" : "Guest");
+  // A feature flag from app/config; defaults to `dflt` (on) when config is absent,
+  // so nothing users rely on disappears just because config hasn't loaded.
+  function flagOn(key, dflt) {
+    const d = dflt === undefined ? true : dflt;
+    const f = appConfig && appConfig.flags;
+    return f && typeof f[key] === "boolean" ? f[key] : d;
+  }
+
+  // Publish (merge) our small profile so an admin can enumerate accounts.
+  function publishUserProfile() {
+    if (!cloudUser) return;
+    Cloud.saveUser(cloudUser.uid, {
+      uid: cloudUser.uid,
+      email: cloudUser.email || "",
+      name: PERSON_NAME,
+      budgetKey: BUDGET_KEY,
+      deployment: BUDGET_KEY,
+      role: currentRole(),
+      appVersion: APP_VERSION,
+      lastActive: Date.now(),
+    });
+  }
+
+  // Watch our own user doc so an admin toggling `disabled` locks this device.
+  function watchSelfUser() {
+    if (selfUserUnsub) { selfUserUnsub(); selfUserUnsub = null; }
+    if (!cloudUser) return;
+    selfUserUnsub = Cloud.watchUser(cloudUser.uid, (doc) => {
+      const now = !!(doc && doc.disabled);
+      if (now !== accountDisabled) { accountDisabled = now; render(); }
+    });
+  }
+
+  // Admin: keep a live directory of all accounts (rules gate the read).
+  function watchAllUsers() {
+    if (usersUnsub) return;
+    usersUnsub = Cloud.watchUsers((list) => {
+      usersCache = (list || []).slice().sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
+      if (adminPanelRefresh) adminPanelRefresh();
+    });
+  }
+  function stopAllUsers() {
+    if (usersUnsub) { usersUnsub(); usersUnsub = null; }
+    usersCache = [];
+  }
+
+  // Broadcast + flags: watch once, for everyone (signed in or not).
+  function watchAppConfig() {
+    if (configUnsub || !cloudOn()) return;
+    configUnsub = Cloud.watchConfig((cfg) => {
+      appConfig = cfg || null;
+      updateBroadcast();
+      if (adminPanelRefresh) adminPanelRefresh();
+    });
+  }
+
+  // An announcement bar the admin controls, shown above #main on every tab.
+  function updateBroadcast() {
+    const app = document.getElementById("app");
+    if (!app || !main) return;
+    let el = document.getElementById("broadcast-banner");
+    const b = appConfig && appConfig.banner;
+    const active = !!(b && b.active && b.text);
+    if (!active) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "broadcast-banner";
+      el.className = "broadcast-banner";
+      app.insertBefore(el, main);
+    }
+    el.textContent = "📢 " + b.text;
+  }
+
+  // Full-screen lock shown when an admin pauses this account.
+  function renderDisabled() {
+    setCur(HOME_CUR);
+    main.innerHTML = `
+      <div class="card locked-card">
+        <div class="locked-emoji">🔒</div>
+        <h2>Account paused</h2>
+        <p class="sub">An admin has paused this account. Your data is safe on this device. Contact the app owner if you think this is a mistake.</p>
+        <button class="btn btn-ghost btn-block" id="dis-signout" style="margin-top:14px;">Sign out</button>
+      </div>`;
+    const so = document.getElementById("dis-signout");
+    if (so) so.addEventListener("click", () => Cloud.signOut());
+  }
+
   function initCloud() {
     if (!cloudOn()) return; // SDK didn't load (e.g. offline) → stay local
     Cloud.init();
+    watchAppConfig(); // broadcast + flags reach everyone, signed in or not
     Cloud.onAuth((user) => {
       cloudUser = user || null;
-      if (user) startSync();
-      else stopSync();
+      if (user) {
+        startSync();
+        publishUserProfile();
+        watchSelfUser();
+        if (isAdmin()) watchAllUsers(); else stopAllUsers();
+      } else {
+        stopSync();
+        if (selfUserUnsub) { selfUserUnsub(); selfUserUnsub = null; }
+        stopAllUsers();
+        accountDisabled = false;
+        updateBroadcast();
+      }
       if (firstAuth) {
         firstAuth = false;
         // Prompt new visitors to sign in once; returning users are auto-signed-in.

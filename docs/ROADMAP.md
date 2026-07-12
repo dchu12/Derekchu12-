@@ -11,6 +11,7 @@ Three deployments, kept in sync on every change:
 - ✅ **#1 Natural-language quick add** (v90) — type "38 ramen" → parses amount + category + note, Enter to save.
 - ✅ **#2 Context-aware coach + burn-rate** (v91) — predicts when a category will run out before payday; sometimes shows projected end-of-period savings.
 - ✅ **#5 End-of-period recap card** (v92) — shareable "wrapped"-style recap on close; re-openable from History.
+- ✅ **Roles: Guest / Member / Admin** (v117) — guest = local-only, member = signed-in + synced, admin (`derekchu12@gmail.com`) = admin panel (user directory + view accounts, pause/enable, broadcast banner, feature flags). App side + `firestore.rules`; deploy walkthrough in `docs/ADMIN.md`. Server enforcement needs the rules published in the Firebase console.
 
 ## Paused — pick up later
 

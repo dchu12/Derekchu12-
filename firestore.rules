@@ -1,0 +1,63 @@
+rules_version = '2';
+
+// Yosan — Firestore security rules.
+//
+// Roles:
+//   guest  — not signed in (never reaches Firestore; the app runs local-only).
+//   user   — any signed-in account. Syncs their budget + monthly results.
+//   admin  — the single account below. Reads every account, manages users,
+//            and writes app-wide config (feature flags + broadcast).
+//
+// Deploy this in the Firebase console (Firestore Database → Rules → paste →
+// Publish) or with `firebase deploy --only firestore:rules`. See docs/ADMIN.md.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // Admin is identified by email, which email/password tokens always carry —
+    // so no custom claims are required.
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == 'derekchu12@gmail.com';
+    }
+
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Shared budget docs (keys: "kelly", "derek", …). Kept open to any signed-in
+    // user so the existing Kelly⇄Derek two-device sync keeps working unchanged;
+    // the admin can read/write everything. NOTE: tighten to per-uid keys before
+    // enabling public sign-up (see docs/ADMIN.md → "Known limitations").
+    match /budgets/{key} {
+      allow read, write: if signedIn();
+    }
+
+    // Monthly results summaries powering the shared Results view.
+    match /results/{key} {
+      allow read, write: if signedIn();
+    }
+
+    // User directory. A user may create/update ONLY their own profile and may
+    // not grant themselves admin or un-pause themselves — those fields are
+    // admin-only. The admin can read, write, and delete any account.
+    match /users/{uid} {
+      allow read:   if isAdmin() || isOwner(uid);
+      allow create: if isAdmin() ||
+        (isOwner(uid)
+         && !request.resource.data.keys().hasAny(['disabled'])
+         && request.resource.data.get('role', 'user') != 'admin');
+      allow update: if isAdmin() ||
+        (isOwner(uid)
+         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['disabled'])
+         && request.resource.data.get('role', 'user') != 'admin');
+      allow delete: if isAdmin();
+    }
+
+    // App config: feature flags + broadcast banner. World-readable so a broadcast
+    // reaches even signed-out visitors; only the admin can change it.
+    match /app/{doc} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+  }
+}
