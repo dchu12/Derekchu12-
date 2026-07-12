@@ -81,6 +81,10 @@ you want *new* users to be able to register themselves (each becoming a **Member
 5. **Rules smoke test** — while signed in as a member, confirm you *cannot* write
    `app/config` (the flag/broadcast controls simply aren't shown to members, and a
    direct write would be denied by rules).
+6. **Sync still works (critical)** — right after publishing, on **Kelly's** device
+   log a spend and confirm it still syncs to Derek's app (and vice-versa). If
+   Kelly's edits stop syncing, her account email casing doesn't match `isKelly()`
+   in `firestore.rules` — add the exact casing and re-publish.
 
 ---
 
@@ -90,12 +94,15 @@ you want *new* users to be able to register themselves (each becoming a **Member
   device from syncing UI, but because budgets are still keyed per-deployment
   (`kelly` / `derek`) rather than per-user, the rules can't yet hard-block a paused
   account's *budget writes*. This is fine for the current fixed set of accounts.
-- **Budgets are readable by any signed-in account.** This deliberately preserves
-  the existing Kelly⇄Derek sync. It's safe while sign-up is closed (only Kelly and
-  Derek accounts exist). **Before enabling public sign-up**, migrate budgets to
-  per-uid keys and tighten the `budgets/{key}` / `results/{key}` rules to
-  `isOwner`/household membership — otherwise a new user could read the existing
-  budgets. This pairs naturally with the roadmap's Household (#4) work.
+- **Budgets/results are now locked to the people who use them** (updated). The
+  rules restrict `budgets/kelly` + both `results/*` to the current household
+  (Kelly by email, Derek as admin), `budgets/derek` to Derek, and treat any other
+  key as a per-uid doc owned by that user — so a future signed-up stranger can't
+  read Kelly's or Derek's data. **Before publishing, Derek should confirm Kelly's
+  exact account email** (the rule allows `Kellyseadreams@gmail.com` and the
+  all-lowercase form; if her account uses a different casing, add it to
+  `isKelly()` or her app will lose sync). When Household (#4) lands, replace the
+  hardcoded `isKelly()`/`isCore()` with real membership lookups.
 - **Reset / delete a user's data** isn't wired to a button yet (Pause covers
   "revoke access" safely). The rules already allow the admin to delete a `users/*`
   doc; ask if you want a guarded "reset data" action added.
