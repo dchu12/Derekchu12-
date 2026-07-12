@@ -1,11 +1,17 @@
 /* Payday Budget service worker — offline support + fresh updates.
  * Network-first: online always gets the latest; offline falls back to cache. */
-const CACHE = "payday-kelly-v119";
+const CACHE = "payday-kelly-v120";
 const CORE = ["./", "./index.html", "./styles.css", "./app.js", "./cloud.js", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
-  self.skipWaiting();
+  // Don't skipWaiting automatically: a new version WAITS so the app can offer an
+  // "Update available — tap to refresh" prompt. The page posts SKIP_WAITING when
+  // the user accepts (see initSWUpdates in app.js).
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).catch(() => {}));
+});
+
+self.addEventListener("message", (e) => {
+  if (e.data === "SKIP_WAITING" || (e.data && e.data.type === "SKIP_WAITING")) self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {

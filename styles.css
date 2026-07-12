@@ -862,3 +862,24 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .onb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background .2s, transform .2s; }
 .onb-dot.on { background: var(--accent); transform: scale(1.25); }
 .onb-actions { display: flex; gap: 10px; }
+
+/* ---- Accessibility polish ---------------------------------------------- */
+/* Consistent keyboard focus ring on anything interactive not already covered
+   (specific components above add their own; this is the safety net). */
+.btn:focus-visible,
+a:focus-visible,
+button:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Honor "reduce motion" everywhere, not just a couple of components. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

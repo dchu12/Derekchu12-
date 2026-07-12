@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "119";
+  const APP_VERSION = "120";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -737,9 +737,10 @@
     return { close, modal };
   }
 
-  /* Lightweight toast with an optional action (used for Undo). */
+  /* Lightweight toast with an optional action (used for Undo).
+   * opts.sticky keeps it up until acted on/replaced (used for update prompts). */
   let _toastTimer = null;
-  function showToast(message, actionLabel, actionFn) {
+  function showToast(message, actionLabel, actionFn, opts) {
     let host = document.getElementById("toast-host");
     if (!host) {
       host = document.createElement("div");
@@ -753,7 +754,7 @@
       </div>`;
     const clear = () => { host.innerHTML = ""; };
     if (_toastTimer) clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(clear, 5000);
+    _toastTimer = opts && opts.sticky ? null : setTimeout(clear, 5000);
     if (actionLabel && actionFn) {
       host.querySelector(".toast-action").addEventListener("click", () => {
         if (_toastTimer) clearTimeout(_toastTimer);
@@ -3775,6 +3776,8 @@
       el = document.createElement("div");
       el.id = "broadcast-banner";
       el.className = "broadcast-banner";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
       app.insertBefore(el, main);
     }
     el.textContent = "📢 " + b.text;
@@ -4081,8 +4084,40 @@
     } catch (e) { /* a helper isn't defined in this deployment — skip the hook */ }
   }
 
+  // Offer "Update available — tap to refresh" when a new service-worker version
+  // is waiting. The SW no longer auto-skips waiting (see sw.js), so we prompt.
+  function initSWUpdates() {
+    if (!("serviceWorker" in navigator)) return;
+    let userAsked = false, reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // Reload only for a user-accepted update — not the first-visit SW claim.
+      if (userAsked && !reloaded) { reloaded = true; location.reload(); }
+    });
+    const offer = (reg) => {
+      if (!reg || !reg.waiting) return;
+      showToast("New version available", "Refresh", () => {
+        userAsked = true;
+        if (reg.waiting) reg.waiting.postMessage("SKIP_WAITING");
+      }, { sticky: true });
+    };
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        if (!reg) return;
+        if (reg.waiting && navigator.serviceWorker.controller) offer(reg);
+        reg.addEventListener("updatefound", () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener("statechange", () => {
+            if (nw.state === "installed" && navigator.serviceWorker.controller) offer(reg);
+          });
+        });
+      })
+      .catch(() => {});
+  }
+
   /* Boot */
   render();
   initCloud();
   maybeShowOnboarding();
+  initSWUpdates();
 })();
