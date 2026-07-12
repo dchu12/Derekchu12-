@@ -4,19 +4,19 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "payday-budget-beta-v1";
+  const STORAGE_KEY = "payday-budget-v1";
 
-  /* Beta playground: the "Email report" button opens a blank-recipient draft
-   * so testers can send it wherever they like. */
-  const REPORT_EMAILS = [];
+  /* Default recipients for the "Email report" button. Change anytime. */
+  const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "118";
+  const APP_VERSION = "{{VERSION}}";
 
-  /* Beta build is local-only (no Firebase sign-in), so these are inert. */
-  const BUDGET_KEY = "beta";
-  const PERSON_NAME = "You";
-  const PARTNER_NAME = "Partner";
+  /* Which shared budget this app instance owns in the cloud (Firebase).
+   * Kelly's app owns "kelly"; Derek's app owns "derek". */
+  const BUDGET_KEY = "kelly";
+  const PERSON_NAME = "Kelly";  // whose budget this app publishes
+  const PARTNER_NAME = "Derek"; // the other person shown in shared Results
 
   // The one account with admin powers (user directory, app controls). Roles are
   // enforced server-side by Firestore rules; the client only reveals admin UI.
@@ -541,20 +541,22 @@
 
   /* Default categories offered on first setup. */
   const STARTER_CATEGORIES = [
-    { emoji: "🏠", name: "Rent", budgeted: "", fixed: true },
-    { emoji: "📱", name: "Phone", budgeted: "", fixed: true },
-    { emoji: "🌐", name: "Internet", budgeted: "", fixed: true },
-    { emoji: "📺", name: "Streaming", budgeted: "", fixed: true },
-    { emoji: "🏋️", name: "Gym", budgeted: "", fixed: true },
+    { emoji: "🐕", name: "Toro Insurance", budgeted: "", fixed: true },
+    { emoji: "🐕", name: "Haku Insurance", budgeted: "", fixed: true },
+    { emoji: "💍", name: "Kelly · Oura Ring", budgeted: "", fixed: true },
+    { emoji: "📺", name: "Kelly · Netflix", budgeted: "", fixed: true },
+    { emoji: "📱", name: "Kelly · Phone", budgeted: "", fixed: true },
+    { emoji: "☁️", name: "Kelly · Apple Storage", budgeted: "", fixed: true },
     { emoji: "🛒", name: "Groceries", budgeted: "" },
     { emoji: "🍽️", name: "Restaurants", budgeted: "" },
     { emoji: "🥡", name: "Take-Out", budgeted: "" },
-    { emoji: "☕", name: "Coffee", budgeted: "" },
-    { emoji: "⛽", name: "Gas", budgeted: "" },
-    { emoji: "🚌", name: "Transit", budgeted: "" },
+    { emoji: "🚗", name: "Ride-Share", budgeted: "" },
+    { emoji: "🚇", name: "TTC", budgeted: "" },
+    { emoji: "🦴", name: "Dog Essentials", budgeted: "" },
     { emoji: "🛍️", name: "Shopping", budgeted: "" },
-    { emoji: "🎬", name: "Entertainment", budgeted: "" },
     { emoji: "📦", name: "Miscellaneous", budgeted: "" },
+    { emoji: "💆", name: "Facial", budgeted: "" },
+    { emoji: "🧑‍⚕️", name: "Chiro", budgeted: "" },
   ];
 
   /* Editable category row, shared by the setup and Manage editors.
@@ -2296,7 +2298,7 @@
     const plural = cats.length > 1;
     const subject = `⚠️ Over budget: ${cats.map((c) => c.name).join(", ")}`;
     const body =
-      `This budget has been exceeded in the following categor${plural ? "ies" : "y"}:\n\n` +
+      `Kelly has exceeded the budget in the following categor${plural ? "ies" : "y"}:\n\n` +
       cats
         .map((c) => {
           const cs = catSpent(p, c.id);
@@ -2313,8 +2315,8 @@
           <h2 style="text-align:center;">Over budget</h2>
           <p class="sub" style="text-align:center;">Heads up — this spending puts ${plural ? "these categories" : "this category"} over budget.</p>
           <ul class="ob-list">${detail}</ul>
-          <button class="btn btn-primary btn-block" id="ob-email">✉️ Email this alert</button>
-          <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled draft you can send to anyone.</p>
+          <button class="btn btn-primary btn-block" id="ob-email">✉️ Email alert to Kelly &amp; Derek</button>
+          <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled message to ${esc(REPORT_EMAILS.join(" and "))}.</p>
           <button class="btn btn-ghost btn-block" id="ob-dismiss">Dismiss</button>
         </div>
       </div>
@@ -3080,7 +3082,8 @@
     return (names[Number(parts[1]) - 1] || "") + " " + parts[0];
   }
 
-  // Render the user's own monthly results from local data.
+  // Render the user's own monthly results from local data, scoped to one
+  // budget type (kind = "payday" | "vacation").
   function renderOwnResults(personCardFn, kind) {
     const isVac = kind === "vacation";
     const myName = PERSON_NAME;
@@ -3144,6 +3147,8 @@
       renderOwnResults(personCard, "vacation");
       return;
     }
+    // Pay-period results: your own local when not synced, otherwise the shared
+    // (payday-only) combined view below.
     if (!cloudOn() || !cloudUser) {
       renderOwnResults(personCard, "payday");
       return;

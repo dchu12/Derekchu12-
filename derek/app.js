@@ -3990,15 +3990,18 @@
     });
 
   // Test-only hook: exposes pure helpers to the Node/jsdom test harness.
-  // Never read by app code, so it has no effect on the running app.
+  // Never read by app code. Wrapped so a helper that a given deployment doesn't
+  // define (e.g. Derek uses computeResultsFor) just skips the hook, never crashes.
   if (typeof window !== "undefined") {
-    window.__yosanTest = {
-      parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
-      mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
-      transactionsCSV,
-      setState: (s) => { state = s; },
-      getState: () => state,
-    };
+    try {
+      window.__yosanTest = {
+        parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
+        mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
+        transactionsCSV,
+        setState: (s) => { state = s; },
+        getState: () => state,
+      };
+    } catch (e) { /* a helper isn't defined in this deployment — skip the hook */ }
   }
 
   /* Boot */

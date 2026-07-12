@@ -1,0 +1,64 @@
+--- a/app.js
++++ b/app.js
+@@ -6,17 +6,17 @@
+ 
+   const STORAGE_KEY = "payday-budget-beta-v1";
+ 
+-  /* Default recipients for the "Email report" button. Change anytime. */
++  /* Beta playground: the "Email report" button opens a blank-recipient draft
++   * so testers can send it wherever they like. */
+   const REPORT_EMAILS = [];
+ 
+   /* Bump on each release so you can confirm the live version in Settings. */
+   const APP_VERSION = "{{VERSION}}";
+ 
+-  /* Which shared budget this app instance owns in the cloud (Firebase).
+-   * Kelly's app owns "kelly"; Derek's app owns "derek". */
++  /* Beta build is local-only (no Firebase sign-in), so these are inert. */
+   const BUDGET_KEY = "beta";
+-  const PERSON_NAME = "You";  // whose budget this app publishes
+-  const PARTNER_NAME = "Partner"; // the other person shown in shared Results
++  const PERSON_NAME = "You";
++  const PARTNER_NAME = "Partner";
+ 
+   // The one account with admin powers (user directory, app controls). Roles are
+   // enforced server-side by Firestore rules; the client only reveals admin UI.
+@@ -2296,7 +2296,7 @@
+     const plural = cats.length > 1;
+     const subject = `⚠️ Over budget: ${cats.map((c) => c.name).join(", ")}`;
+     const body =
+-      `Kelly has exceeded the budget in the following categor${plural ? "ies" : "y"}:\n\n` +
++      `This budget has been exceeded in the following categor${plural ? "ies" : "y"}:\n\n` +
+       cats
+         .map((c) => {
+           const cs = catSpent(p, c.id);
+@@ -2313,8 +2313,8 @@
+           <h2 style="text-align:center;">Over budget</h2>
+           <p class="sub" style="text-align:center;">Heads up — this spending puts ${plural ? "these categories" : "this category"} over budget.</p>
+           <ul class="ob-list">${detail}</ul>
+-          <button class="btn btn-primary btn-block" id="ob-email">✉️ Email alert to Kelly &amp; Derek</button>
+-          <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled message to ${esc(REPORT_EMAILS.join(" and "))}.</p>
++          <button class="btn btn-primary btn-block" id="ob-email">✉️ Email this alert</button>
++          <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled draft you can send to anyone.</p>
+           <button class="btn btn-ghost btn-block" id="ob-dismiss">Dismiss</button>
+         </div>
+       </div>
+@@ -3080,8 +3080,7 @@
+     return (names[Number(parts[1]) - 1] || "") + " " + parts[0];
+   }
+ 
+-  // Render the user's own monthly results from local data, scoped to one
+-  // budget type (kind = "payday" | "vacation").
++  // Render the user's own monthly results from local data.
+   function renderOwnResults(personCardFn, kind) {
+     const isVac = kind === "vacation";
+     const myName = PERSON_NAME;
+@@ -3145,8 +3144,6 @@
+       renderOwnResults(personCard, "vacation");
+       return;
+     }
+-    // Pay-period results: your own local when not synced, otherwise the shared
+-    // (payday-only) combined view below.
+     if (!cloudOn() || !cloudUser) {
+       renderOwnResults(personCard, "payday");
+       return;

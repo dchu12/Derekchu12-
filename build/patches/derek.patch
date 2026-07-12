@@ -1,0 +1,471 @@
+--- a/app.js
++++ b/app.js
+@@ -49,7 +49,6 @@
+   ];
+ 
+   // Migrate older shapes forward (single `goal` → `goals` array).
+-  // Uses an inline id (runs during initial load, before `uid` is initialized).
+   function migrateState(s) {
+     const gid = () => "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+     if (s.goal && (!Array.isArray(s.goals) || !s.goals.length)) {
+@@ -60,16 +59,25 @@
+     return s;
+   }
+ 
+-  let state = load();
++  /* Derek's app manages two budgets: his own ("derek") and — for the owner —
++   * Kelly's ("kelly", a synced mirror). `active` selects which one the UI shows;
++   * `state` always points at the active workspace's state object. */
++  const WORKSPACES = {
++    derek: { key: "derek", name: "Derek", storage: STORAGE_KEY },
++    kelly: { key: "kelly", name: "Kelly", storage: "payday-budget-kelly-mirror-v1" },
++  };
++  let active = "derek";
++  const wsState = { derek: loadWS("derek"), kelly: loadWS("kelly") };
++  let state = wsState[active];
+ 
+   // Cloud sync (Firebase) — entirely optional. The app is fully usable signed out.
+   let cloudUser = null;   // current Firebase user, or null
+-  let cloudUnsub = null;  // realtime budget listener unsubscribe
+-  let pushTimer = null;   // debounce handle for cloud writes
+   let firstAuth = true;   // so we only show the first-visit sign-in prompt once
++  const wsUnsub = { derek: null, kelly: null };     // per-workspace budget listeners
++  const wsPushTimer = { derek: null, kelly: null }; // per-workspace debounce handles
+   let resultsUnsub = [];  // realtime results listeners (both people)
+   const resultsCache = { kelly: null, derek: null }; // latest results docs
+-  let resultsSeeded = false; // publish our results summary once after first sync
++  const resultsSeeded = { derek: false, kelly: false }; // publish each summary once after first sync
+   // Roles + app config (feature flags / broadcast). All optional; the app is
+   // fully usable signed out or when Firebase isn't available.
+   let appConfig = null;        // latest app/config doc, or null
+@@ -83,12 +91,11 @@
+   let bannerDismissed =
+     Date.now() - Number(localStorage.getItem(STORAGE_KEY + "-banner-dismissed") || 0) < 30 * 86400000;
+ 
+-  function load() {
++  function loadWS(who) {
+     try {
+-      const raw = localStorage.getItem(STORAGE_KEY);
++      const raw = localStorage.getItem(WORKSPACES[who].storage);
+       if (!raw) return defaultState();
+-      const parsed = JSON.parse(raw);
+-      const st = migrateState(Object.assign(defaultState(), parsed));
++      const st = migrateState(Object.assign(defaultState(), JSON.parse(raw)));
+       st.view = "dashboard"; // always land on Overview after a refresh
+       return st;
+     } catch (e) {
+@@ -97,11 +104,11 @@
+     }
+   }
+ 
+-  // Write to localStorage without touching the sync timestamp (used when
+-  // adopting a remote change, so it doesn't bounce straight back to the cloud).
+-  function persistLocal() {
++  // Write a workspace to localStorage without touching its sync timestamp.
++  function persistLocal(who) {
++    who = who || active;
+     try {
+-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
++      localStorage.setItem(WORKSPACES[who].storage, JSON.stringify(wsState[who]));
+     } catch (e) {
+       console.error("Failed to save state", e);
+     }
+@@ -109,8 +116,18 @@
+ 
+   function save() {
+     state.updatedAt = Date.now();
+-    persistLocal();
+-    schedulePush();
++    wsState[active] = state;
++    persistLocal(active);
++    schedulePush(active);
++  }
++
++  // Switch which budget the UI is showing/editing (owner only).
++  function setActive(who) {
++    if (!WORKSPACES[who] || who === active) return;
++    active = who;
++    state = wsState[who];
++    updateWsSwitcher();
++    render();
+   }
+ 
+   /* ------------------------------------------------------------------ *
+@@ -254,7 +271,6 @@
+    * people never drops a transaction.
+    * ------------------------------------------------------------------ */
+ 
+-  // Delete a transaction and record a tombstone so it doesn't resurrect on merge.
+   function deleteTxn(p, txnId) {
+     const idx = p.transactions.findIndex((t) => t.id === txnId);
+     if (idx === -1) return null;
+@@ -264,14 +280,12 @@
+     return { removed, idx };
+   }
+ 
+-  // Restore a tombstoned transaction (Undo). Bump editedAt so it beats the tombstone on merge.
+   function restoreTxn(p, txnObj, idx) {
+     if (p.deletedTxnIds) delete p.deletedTxnIds[txnObj.id];
+     txnObj.editedAt = Date.now();
+     p.transactions.splice(Math.min(idx, p.transactions.length), 0, txnObj);
+   }
+ 
+-  // Merge one period's transactions from a local and a remote copy.
+   function mergeTransactions(localP, remoteP) {
+     const tomb = {};
+     const addTomb = (m) => {
+@@ -293,7 +307,6 @@
+     return { transactions: live, deletedTxnIds: tomb };
+   }
+ 
+-  // Merge periods between a local state and an incoming (remote) state, in place on `merged`.
+   function mergePeriods(local, merged) {
+     const localById = {};
+     (local.periods || []).forEach((p) => (localById[p.id] = p));
+@@ -307,7 +320,6 @@
+         rp.deletedTxnIds = m.deletedTxnIds;
+       }
+     });
+-    // Keep periods created locally that the remote copy hasn't seen yet.
+     (local.periods || []).forEach((lp) => {
+       if (!seen[lp.id]) merged.periods.push(lp);
+     });
+@@ -317,9 +329,9 @@
+   }
+ 
+   // Month-by-month summary for the shared Results view (published to Firestore).
+-  function computeResults(kind) {
++  function computeResultsFor(st, personName, kind) {
+     const months = {};
+-    state.periods.forEach((p) => {
++    st.periods.forEach((p) => {
+       if (kind && periodKind(p) !== kind) return; // scope to one budget type
+       const mk = (p.startDate || "").slice(0, 7); // YYYY-MM
+       if (!mk) return;
+@@ -352,7 +364,7 @@
+           })),
+         };
+       });
+-    return { name: PERSON_NAME, updatedAt: Date.now(), months: list };
++    return { name: personName, updatedAt: Date.now(), months: list };
+   }
+   // Actual money saved in a period = income minus everything spent.
+   const periodSaved = (p) => periodIncome(p) - totalSpent(p);
+@@ -458,12 +470,12 @@
+         text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
+       };
+     }
+-    // On track — mix warm encouragement with wisdom from The Psychology of Money
++    // On track — mix encouragement with wisdom from The Psychology of Money
+     // and The Art of Spending Money (both by Morgan Housel).
+     const lines = [
+       // Warm, on-track encouragements
+-      "💙 You're right on track — lovely work. Keep it up!",
+-      "🌊 Looking good — plenty of comfortable room left this period.",
++      "💚 Right on track — nice work. Keep it rolling!",
++      "📈 Looking good — plenty of comfortable room left this period.",
+       "🎯 Bang on budget. This is exactly what winning looks like.",
+       "🍃 Calm and steady — your budget's breathing easy this period.",
+       "⛵ Smooth sailing. You're gliding through this one with room to spare.",
+@@ -494,30 +506,30 @@
+       "⚖️ Spend on today, save for tomorrow — you've found the balance this period.",
+       "🌰 Big oaks come from steadily planted acorns. Keep planting.",
+       // The Psychology of Money (Morgan Housel)
+-      "✨ “Saving is the gap between your ego and your income.” You're minding that gap beautifully. — The Psychology of Money",
++      "✨ “Saving is the gap between your ego and your income.” You're minding that gap well. — The Psychology of Money",
+       "💰 “Wealth is what you don't see.” Every dollar you don't spend is quietly becoming your freedom. — The Psychology of Money",
+       "🕊️ “Controlling your time is the highest dividend money pays.” Staying on budget buys more of it. — The Psychology of Money",
+       "🌱 “Building wealth has little to do with your income and a lot to do with your savings rate.” You're doing the part that matters. — The Psychology of Money",
+-      "☕ “Spending money to show people how much money you have is the fastest way to have less.” Nice and steady wins. — The Psychology of Money",
++      "☕ “Spending money to show people how much money you have is the fastest way to have less.” Steady wins. — The Psychology of Money",
+       "🎩 “The ability to do what you want, when you want, is priceless.” Your budget is buying that. — The Psychology of Money",
+       "🛡️ “Room for error is what lets you endure.” You're leaving yourself some — smart. — The Psychology of Money",
+       "😌 “Enough” is knowing when to stop moving the goalposts. You seem to know yours. — The Psychology of Money",
+       "🌰 Compounding rewards patience, not intensity. You're giving it time. — The Psychology of Money",
+       // The Art of Spending Money (Morgan Housel)
+-      "🛍️ “Spending money is easy. Spending it well is a skill.” And you're getting good at it. — The Art of Spending Money",
+-      "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you love. — The Art of Spending Money",
++      "🛍️ “Spending money is easy. Spending it well is a skill.” And you're sharpening it. — The Art of Spending Money",
++      "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you value. — The Art of Spending Money",
+       "🧭 “The whole point of money is to give you independence and freedom.” Every mindful choice buys a little more. — The Art of Spending Money",
+       "🎁 The best purchases buy better days, not just nicer things. You're spending with intention. — The Art of Spending Money",
+       "🍷 Spending well means matching money to what you actually value. You're aligned this period. — The Art of Spending Money",
+       "🌅 Money's real job is to improve how you feel about your days. Looks like it's doing its job. — The Art of Spending Money",
+     ];
+-    // Celebrate any savings/goal category she's fully funded this period.
++    // Celebrate any savings/goal category fully funded this period.
+     const funded = p.categories.filter(
+       (c) => c.budgeted > 0 && isSavingsCat(c) && catSpent(p, c.id) >= c.budgeted - 0.005
+     );
+     if (funded.length) {
+       lines.unshift(
+-        `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
++        `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Nicely done!`
+       );
+     }
+     // Every so often, surface a data-aware projection instead of a quote so the
+@@ -1195,7 +1207,6 @@
+         closed: false,
+         createdAt: new Date().toISOString(),
+       };
+-      // Prepaid fixed items (flights, lodging) auto-log as spent up front.
+       cats.forEach((c) => {
+         if (c.fixed && c.budgeted > 0) {
+           period.transactions.push({
+@@ -1540,7 +1551,7 @@
+     document.getElementById("ev-go").addEventListener("click", () => {
+       p.closed = true;
+       p.closedAt = new Date().toISOString();
+-      state.activeBudget = "payday"; // hop back to the pay period after ending
++      state.activeBudget = "payday";
+       save();
+       close();
+       render();
+@@ -2297,7 +2308,7 @@
+     const plural = cats.length > 1;
+     const subject = `⚠️ Over budget: ${cats.map((c) => c.name).join(", ")}`;
+     const body =
+-      `Kelly has exceeded the budget in the following categor${plural ? "ies" : "y"}:\n\n` +
++      `You've exceeded the budget in the following categor${plural ? "ies" : "y"}:\n\n` +
+       cats
+         .map((c) => {
+           const cs = catSpent(p, c.id);
+@@ -2314,7 +2325,7 @@
+           <h2 style="text-align:center;">Over budget</h2>
+           <p class="sub" style="text-align:center;">Heads up — this spending puts ${plural ? "these categories" : "this category"} over budget.</p>
+           <ul class="ob-list">${detail}</ul>
+-          <button class="btn btn-primary btn-block" id="ob-email">✉️ Email alert to Kelly &amp; Derek</button>
++          <button class="btn btn-primary btn-block" id="ob-email">✉️ Email this alert</button>
+           <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled message to ${esc(REPORT_EMAILS.join(" and "))}.</p>
+           <button class="btn btn-ghost btn-block" id="ob-dismiss">Dismiss</button>
+         </div>
+@@ -3082,11 +3093,12 @@
+   }
+ 
+   // Render the user's own monthly results from local data, scoped to one
+-  // budget type (kind = "payday" | "vacation").
++  // budget type (kind = "payday" | "vacation"). `personCardFn` is the shared
++  // card renderer defined below.
+   function renderOwnResults(personCardFn, kind) {
+     const isVac = kind === "vacation";
+-    const myName = PERSON_NAME;
+-    const mine = computeResults(kind);
++    const myName = (WORKSPACES && WORKSPACES[active] && WORKSPACES[active].name) || PERSON_NAME;
++    const mine = computeResultsFor(state, myName, kind);
+     if (!mine.months.length) {
+       main.innerHTML = `<div class="card"><h2>${isVac ? "Vacation results" : "Your results"}</h2><p class="sub">${isVac ? "Once you log spending on a vacation budget, each trip's totals show up here." : "Once you finish a pay period, each month's income, spending, and savings show up here."}</p></div>`;
+       return;
+@@ -3318,6 +3330,14 @@
+          <button class="btn btn-primary btn-block" id="set-admin">🛠️ Open admin panel</button>
+          <p class="footer-note" style="margin:6px 0 0;">Manage users, view accounts, broadcast a message, and toggle features.</p>`
+       : "";
++    const householdBlock = !cloudUser
++      ? ""
++      : `<div class="section-label set-sec">Household</div>
++         <div class="ws-switch" id="set-ws-switch">
++           <button type="button" class="ws-btn ${active === "derek" ? "active" : ""}" data-ws="derek">${esc(WORKSPACES.derek.name)}</button>
++           <button type="button" class="ws-btn ${active === "kelly" ? "active" : ""}" data-ws="kelly">${esc(WORKSPACES.kelly.name)}</button>
++         </div>
++         <p class="footer-note" style="margin:6px 0 0;">Choose whose budget you're viewing.</p>`;
+     const { close } = mountModal(`
+       <div class="modal-overlay">
+         <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
+@@ -3328,6 +3348,8 @@
+ 
+           ${adminBlock}
+ 
++          ${householdBlock}
++
+           ${flagOn("vacationMode", true) ? `<div class="section-label set-sec">Preferences</div>
+           <div class="vac-row">
+             <div class="vac-copy">
+@@ -3378,6 +3400,15 @@
+         openAdminPanel();
+       });
+ 
++    const wsSwitchSet = document.getElementById("set-ws-switch");
++    if (wsSwitchSet)
++      wsSwitchSet.addEventListener("click", (e) => {
++        const btn = e.target.closest("[data-ws]");
++        if (!btn) return;
++        setActive(btn.dataset.ws);
++        close();
++      });
++
+     const vacToggle = document.getElementById("set-vacation");
+     if (vacToggle)
+       vacToggle.addEventListener("change", () => {
+@@ -3733,92 +3764,125 @@
+   }
+ 
+   function startSync() {
+-    if (cloudUnsub) return;
+-    cloudUnsub = Cloud.watchBudget(BUDGET_KEY, onRemoteBudget);
+-    ["kelly", "derek"].forEach((who) => {
+-      resultsUnsub.push(
+-        Cloud.watchResults(who, (doc) => {
+-          resultsCache[who] = doc;
+-          if (state.view === "results") renderResults();
+-        })
+-      );
+-    });
++    // Derek (owner) syncs both his own budget and Kelly's mirror.
++    ["derek", "kelly"].forEach((who) => {
++      if (!wsUnsub[who]) wsUnsub[who] = Cloud.watchBudget(who, (r) => onRemoteBudget(who, r));
++    });
++    if (!resultsUnsub.length) {
++      ["kelly", "derek"].forEach((who) => {
++        resultsUnsub.push(
++          Cloud.watchResults(who, (doc) => {
++            resultsCache[who] = doc;
++            if (state.view === "results") renderResults();
++          })
++        );
++      });
++    }
++    updateWsSwitcher();
+   }
+ 
+   function stopSync() {
+-    if (cloudUnsub) {
+-      cloudUnsub();
+-      cloudUnsub = null;
+-    }
++    Object.keys(wsUnsub).forEach((who) => {
++      if (wsUnsub[who]) {
++        wsUnsub[who]();
++        wsUnsub[who] = null;
++      }
++    });
+     resultsUnsub.forEach((fn) => fn && fn());
+     resultsUnsub = [];
+     resultsCache.kelly = null;
+     resultsCache.derek = null;
++    // Signed out → only your own budget is available.
++    if (active !== "derek") {
++      active = "derek";
++      state = wsState.derek;
++      render();
++    }
++    updateWsSwitcher();
+   }
+ 
+-  function publishOwnResults() {
+-    if (cloudUser) Cloud.saveResults(BUDGET_KEY, computeResults("payday"));
++  function publishResults(who) {
++    if (cloudUser) Cloud.saveResults(who, computeResultsFor(wsState[who], WORKSPACES[who].name, "payday"));
+   }
+ 
+-  // A remote budget doc arrived (initial load or the other person edited).
+-  function onRemoteBudget(remote) {
+-    const localAt = state.updatedAt || 0;
++  // A remote budget doc arrived for `who` (initial load or the other person edited).
++  function onRemoteBudget(who, remote) {
++    const st = wsState[who];
++    const localAt = st.updatedAt || 0;
+     if (!remote) {
+-      pushCloud(); // cloud is empty — seed it from this device (also publishes results)
+-      resultsSeeded = true;
++      pushCloud(who); // cloud is empty — seed it from this device (also publishes results)
++      resultsSeeded[who] = true;
+       return;
+     }
+     const remoteAt = remote.updatedAt || 0;
+     if (remoteAt > localAt && remote.data) {
+-      adoptRemote(remote);
++      adoptRemote(who, remote);
+     } else if (localAt > remoteAt) {
+-      pushCloud(); // our local copy is newer — push it up
++      pushCloud(who); // our local copy is newer — push it up
+     }
+-    // Make sure our results summary is published at least once after first sync,
+-    // even if the budget was already up to date (no edit to trigger a push).
+-    if (!resultsSeeded) {
+-      publishOwnResults();
+-      resultsSeeded = true;
++    // Ensure each results summary is published at least once after first sync,
++    // even when the budget was already up to date (no edit to trigger a push).
++    if (!resultsSeeded[who]) {
++      publishResults(who);
++      resultsSeeded[who] = true;
+     }
+   }
+ 
+-  function adoptRemote(remote) {
+-    const localState = state;
+-    const keepView = state.view;
+-    const keepReport = state._reportId;
++  function adoptRemote(who, remote) {
++    const prev = wsState[who];
+     const merged = migrateState(Object.assign(defaultState(), remote.data));
+-    mergePeriods(localState, merged); // union periods + merge transactions (no lost logs)
+-    merged.view = keepView; // don't yank the other person's tab around
+-    if (keepReport) merged._reportId = keepReport;
++    mergePeriods(prev, merged); // union periods + merge transactions (no lost logs)
++    merged.view = prev.view; // don't yank the tab around
++    if (prev._reportId) merged._reportId = prev._reportId;
++    if (prev._resultsMonth) merged._resultsMonth = prev._resultsMonth;
+     merged.updatedAt = remote.updatedAt;
+-    state = merged;
+-    persistLocal();
+-    render();
++    wsState[who] = merged;
++    if (who === active) state = merged;
++    persistLocal(who);
++    if (who === active) render();
+     if (remote.updatedBy && remote.updatedBy !== currentEmail()) {
+-      showToast("☁️ Budget updated from the cloud");
++      showToast("☁️ " + WORKSPACES[who].name + "'s budget updated from the cloud");
+     }
+   }
+ 
+-  function pushCloud() {
++  function pushCloud(who) {
++    who = who || active;
+     if (!cloudUser) return;
+-    if (!state.updatedAt) state.updatedAt = Date.now();
+-    const data = JSON.parse(JSON.stringify(state));
++    const st = wsState[who];
++    if (!st.updatedAt) st.updatedAt = Date.now();
++    const data = JSON.parse(JSON.stringify(st));
+     delete data.view; // per-device UI, not shared
+     delete data._reportId;
+     delete data._resultsMonth;
+     delete data._spendFilter;
+-    Cloud.saveBudget(BUDGET_KEY, {
++    Cloud.saveBudget(who, {
+       data: data,
+-      updatedAt: state.updatedAt,
++      updatedAt: st.updatedAt,
+       updatedBy: currentEmail() || "",
+     });
+-    Cloud.saveResults(BUDGET_KEY, computeResults("payday"));
++    Cloud.saveResults(who, computeResultsFor(st, WORKSPACES[who].name, "payday"));
+   }
+ 
+-  function schedulePush() {
++  function schedulePush(who) {
++    who = who || active;
+     if (!cloudUser) return;
+-    clearTimeout(pushTimer);
+-    pushTimer = setTimeout(pushCloud, 700);
++    clearTimeout(wsPushTimer[who]);
++    wsPushTimer[who] = setTimeout(() => pushCloud(who), 700);
++  }
++
++  // The "My budget / Kelly's budget" switcher (owner only, when signed in).
++  function updateWsSwitcher() {
++    const el = document.getElementById("ws-switch");
++    if (!el) return;
++    if (!cloudUser) {
++      el.hidden = true;
++      el.innerHTML = "";
++      return;
++    }
++    el.hidden = false;
++    el.innerHTML =
++      `<button type="button" class="ws-btn ${active === "derek" ? "active" : ""}" data-ws="derek">${esc(WORKSPACES.derek.name)}</button>` +
++      `<button type="button" class="ws-btn ${active === "kelly" ? "active" : ""}" data-ws="kelly">${esc(WORKSPACES.kelly.name)}</button>`;
+   }
+ 
+   function friendlyAuthError(e) {

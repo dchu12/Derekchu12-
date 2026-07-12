@@ -49,3 +49,40 @@ python3 -m http.server 8000
 | `manifest.json` | PWA metadata for home-screen install |
 
 Your data is stored under the `payday-budget-v1` key in `localStorage`.
+
+## Development
+
+There are three deployments that share one codebase:
+
+- **Kelly** — repo root (`/`)
+- **Derek** — `derek/` (adds a dual-workspace view of Kelly's budget too)
+- **Beta** — `beta/` (public, local-only playground; no Firebase)
+
+They are **generated from a single source** so a shared change is written once,
+not copy-pasted three times:
+
+| Path | Purpose |
+|------|---------|
+| `src/app.js`, `src/sw.js` | Canonical shared source (Kelly is the baseline) |
+| `build/deployments.mjs` | Per-deployment config: names, budget key, report emails, **starter categories**, and the single **`VERSION`** |
+| `build/patches/*.patch` | Each deployment's bespoke delta (Derek's dual-workspace layer, Beta's local-only copy) |
+| `build/build.mjs` | Generates each `app.js` + `sw.js` and stamps the `index.html` cache-buster |
+
+```bash
+npm install          # dev dependency: jsdom (for tests)
+npm test             # unit tests for the money/date/merge/parser logic
+npm run build        # regenerate all three deployments from src/
+npm run build:check  # fail if a committed deployment has drifted from src/ (CI guard)
+```
+
+**To make a shared change:** edit `src/app.js`, run `npm run build`, commit.
+**To cut a release:** bump `VERSION` in `build/deployments.mjs`, run `npm run build`.
+**To change per-deployment config** (starter categories, names): edit
+`build/deployments.mjs`, run `npm run build`.
+
+If a shared edit collides with a deployment's patch, the build says so — run
+`node build/build.mjs --gen-patches` to re-capture the deltas. CI (`.github/
+workflows/ci.yml`) runs the tests and the drift check on every push.
+
+Styling/theme (each app has its own accent color) and `manifest.json` stay
+per-deployment and are edited directly.
