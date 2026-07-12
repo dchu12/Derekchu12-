@@ -836,3 +836,29 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
 .adm-stat .sv { font-size: 15px; font-weight: 800; color: var(--text); margin-top: 2px; }
 .adm-catrow { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--border); }
 .adm-catrow:last-child { border-bottom: none; }
+
+/* ---- Spend search + date range ----------------------------------------- */
+.spend-search { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.spend-search input[type="search"] {
+  width: 100%; box-sizing: border-box; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text); font: inherit;
+}
+.spend-dates { display: flex; align-items: center; gap: 6px; }
+.spend-dates input[type="date"] {
+  flex: 1; min-width: 0; box-sizing: border-box; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface); color: var(--text); font: inherit;
+}
+.spend-dash { color: var(--text-dim); flex: 0 0 auto; }
+.sp-clear { flex: 0 0 auto; }
+
+/* ---- First-run onboarding ---------------------------------------------- */
+.onb-modal { text-align: center; }
+.onb-emoji { font-size: 52px; line-height: 1; margin: 6px 0 10px; }
+.onb-title { margin: 0 0 8px; }
+.onb-text { color: var(--text-dim); font-size: 15px; line-height: 1.5; margin: 0 0 18px; }
+.onb-dots { display: flex; justify-content: center; gap: 7px; margin-bottom: 18px; }
+.onb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background .2s, transform .2s; }
+.onb-dot.on { background: var(--accent); transform: scale(1.25); }
+.onb-actions { display: flex; gap: 10px; }

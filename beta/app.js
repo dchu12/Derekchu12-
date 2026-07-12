@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "118";
+  const APP_VERSION = "119";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -79,6 +79,8 @@
   let selfUserUnsub = null;    // watch our own users/{uid} doc (honor admin disable)
   let accountDisabled = false; // set true if an admin disables this account
   let adminPanelRefresh = null;// re-render hook while the admin panel is open
+  // Spend-tab search/date filters — transient per-session (never persisted or synced).
+  let _spendQuery = "", _spendFrom = "", _spendTo = "";
   // Data-safety banner: stays dismissed for 30 days once closed (persisted), so it doesn't nag.
   let bannerDismissed =
     Date.now() - Number(localStorage.getItem(STORAGE_KEY + "-banner-dismissed") || 0) < 30 * 86400000;
@@ -359,6 +361,15 @@
   // Cumulative savings across all closed (finished) periods.
   const totalSavedToDate = () =>
     state.periods.filter((p) => p.closed).reduce((s, p) => s + periodSaved(p), 0);
+
+  // Save rate (share of income kept) per period — for the Reports trend. Pure/testable.
+  function saveRateSeries(periods) {
+    return (periods || []).map((p) => {
+      const income = periodIncome(p);
+      const saved = periodSaved(p);
+      return { startDate: p.startDate, income, saved, rate: income > 0 ? saved / income : 0 };
+    });
+  }
 
   // A savings/goal category (e.g. "Savings", "Emergency fund") is money set aside
   // on purpose — funding it fully is a win, not overspending, so the coach never scolds it.
@@ -1938,8 +1949,25 @@
       if (activeFilter === "fixed") return c && !!c.fixed;
       return t.categoryId === activeFilter;
     };
-    const filtered = txns.filter(matchesFilter);
-    const filteredTotal = filtered.reduce((s, t) => s + Number(t.amount), 0);
+    // Search (notes / category / amount) + date range, layered on the chip filter.
+    const searchActive = () => !!(_spendQuery || _spendFrom || _spendTo);
+    function computeFiltered() {
+      const q = (_spendQuery || "").trim().toLowerCase();
+      const fromD = _spendFrom || "", toD = _spendTo || "";
+      return txns.filter((t) => {
+        if (!matchesFilter(t)) return false;
+        if (fromD && (t.date || "") < fromD) return false;
+        if (toD && (t.date || "") > toD) return false;
+        if (q) {
+          const c = catById[t.categoryId] || {};
+          if (!(String(t.description || "").toLowerCase().includes(q) ||
+                String(c.name || "").toLowerCase().includes(q) ||
+                String(t.amount).includes(q))) return false;
+        }
+        return true;
+      });
+    }
+    const filtered = computeFiltered();
 
     // Offer the discretionary / fixed split only when both kinds of spending exist.
     const typeChips =
@@ -1969,11 +1997,14 @@
          </div>`
       : "";
 
-    const list = filtered.length
-      ? filtered
-          .map((t) => {
-            const c = catById[t.categoryId] || { emoji: "❓", name: "Uncategorized" };
-            return `
+    function listHTML(items) {
+      if (!items.length) {
+        return `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" && !searchActive() ? "No spending logged yet this period. Tap “Log spend” up top to add one." : "Nothing matches your search or filters."}</p></div>`;
+      }
+      return items
+        .map((t) => {
+          const c = catById[t.categoryId] || { emoji: "❓", name: "Uncategorized" };
+          return `
           <div class="txn" data-id="${t.id}">
             <button type="button" class="txn-left txn-edit" data-edit="${t.id}" aria-label="Edit ${esc(t.description || c.name)}">
               <div class="txn-emoji">${esc(c.emoji)}</div>
@@ -1987,18 +2018,33 @@
               <button class="rm" data-rm="${t.id}" title="Delete" aria-label="Delete ${esc(t.description || c.name)}">🗑</button>
             </div>
           </div>`;
-          })
-          .join("")
-      : `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" ? "No spending logged yet this period. Tap “Log spend” up top to add one." : "Nothing matches this filter yet."}</p></div>`;
+        })
+        .join("");
+    }
+    function sublineText(items) {
+      const filterName =
+        activeFilter === "discretionary" ? "discretionary spending"
+        : activeFilter === "fixed" ? "fixed bills"
+        : (catById[activeFilter] || {}).name || "category";
+      const totalOf = items.reduce((s, t) => s + Number(t.amount), 0);
+      if (activeFilter === "all" && !searchActive())
+        return `${items.length} ${items.length === 1 ? "transaction" : "transactions"}${txns.length ? " · tap one to edit" : ""}`;
+      const scope = activeFilter === "all" ? "" : ` in ${esc(filterName)}`;
+      return `${items.length} ${items.length === 1 ? "transaction" : "transactions"} · ${fmt(totalOf)}${scope}`;
+    }
 
-    const filterName =
-      activeFilter === "discretionary" ? "discretionary spending"
-      : activeFilter === "fixed" ? "fixed bills"
-      : (catById[activeFilter] || {}).name || "category";
-    const subline =
-      activeFilter === "all"
-        ? `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"}${txns.length ? " · tap one to edit" : ""}`
-        : `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"} · ${fmt(filteredTotal)} in ${esc(filterName)}`;
+    // Search + date-range controls (only meaningful once there are transactions).
+    const searchRow = txns.length
+      ? `<div class="spend-search">
+           <input id="sp-search" type="search" inputmode="search" placeholder="Search notes or categories…" value="${esc(_spendQuery || "")}" aria-label="Search transactions" />
+           <div class="spend-dates">
+             <input id="sp-from" type="date" value="${esc(_spendFrom || "")}" aria-label="From date" />
+             <span class="spend-dash" aria-hidden="true">–</span>
+             <input id="sp-to" type="date" value="${esc(_spendTo || "")}" aria-label="To date" />
+             <button type="button" class="chip sp-clear" id="sp-clear"${searchActive() ? "" : " hidden"}>Clear</button>
+           </div>
+         </div>`
+      : "";
 
     main.innerHTML = `
       <div class="card spend-sum">
@@ -2014,12 +2060,57 @@
         </div>` : ""}
       </div>
       <div class="card">
-        <p class="sub" style="margin-top:0;">${subline}</p>
+        <p class="sub" id="spend-subline" style="margin-top:0;">${sublineText(filtered)}</p>
+        ${searchRow}
         ${filterRow}
         ${sortRow}
-        ${list}
+        <div id="spend-list">${listHTML(filtered)}</div>
       </div>
     `;
+
+    // Re-attach per-row edit/delete handlers (list innerHTML is rebuilt on search).
+    function wireRows() {
+      main.querySelectorAll("[data-edit]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const t = p.transactions.find((x) => x.id === btn.dataset.edit);
+          if (t) openSpendModal(p, null, t);
+        })
+      );
+      main.querySelectorAll("[data-rm]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const res = deleteTxn(p, btn.dataset.rm);
+          if (!res) return;
+          save();
+          render();
+          showToast("Transaction deleted", "Undo", () => {
+            restoreTxn(p, res.removed, res.idx);
+            save();
+            render();
+          });
+        })
+      );
+    }
+
+    // Partial redraw on search/date change — keeps the search box focused.
+    function redrawList() {
+      const items = computeFiltered();
+      const lc = document.getElementById("spend-list");
+      const sl = document.getElementById("spend-subline");
+      if (lc) lc.innerHTML = listHTML(items);
+      if (sl) sl.innerHTML = sublineText(items);
+      const clr = document.getElementById("sp-clear");
+      if (clr) clr.hidden = !searchActive();
+      wireRows();
+    }
+
+    const searchInput = document.getElementById("sp-search");
+    if (searchInput) searchInput.addEventListener("input", () => { _spendQuery = searchInput.value; redrawList(); });
+    const fromInput = document.getElementById("sp-from");
+    if (fromInput) fromInput.addEventListener("change", () => { _spendFrom = fromInput.value; redrawList(); });
+    const toInput = document.getElementById("sp-to");
+    if (toInput) toInput.addEventListener("change", () => { _spendTo = toInput.value; redrawList(); });
+    const clearSearch = document.getElementById("sp-clear");
+    if (clearSearch) clearSearch.addEventListener("click", () => { _spendQuery = ""; _spendFrom = ""; _spendTo = ""; render(); });
 
     const sortEl = document.getElementById("spend-sort");
     if (sortEl)
@@ -2039,26 +2130,7 @@
         render();
       });
 
-    main.querySelectorAll("[data-edit]").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const t = p.transactions.find((x) => x.id === btn.dataset.edit);
-        if (t) openSpendModal(p, null, t);
-      })
-    );
-
-    main.querySelectorAll("[data-rm]").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const res = deleteTxn(p, btn.dataset.rm);
-        if (!res) return;
-        save();
-        render();
-        showToast("Transaction deleted", "Undo", () => {
-          restoreTxn(p, res.removed, res.idx);
-          save();
-          render();
-        });
-      })
-    );
+    wireRows();
   }
 
   // editTxn: pass an existing transaction to edit it instead of adding a new one.
@@ -2414,6 +2486,17 @@
       })
       .join("")}</div>`;
 
+    // Save rate (share of income kept) over the same recent periods.
+    const rateSeries = saveRateSeries(chrono);
+    const avgRate = rateSeries.length ? rateSeries.reduce((s, r) => s + r.rate, 0) / rateSeries.length : 0;
+    const rateChart = `<div class="savings-chart">${rateSeries
+      .map((r) => {
+        const pct = Math.round(r.rate * 100);
+        const h = r.rate <= 0 ? 4 : Math.max(4, Math.min(100, pct));
+        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${r.rate < 0 ? "neg" : ""}" style="height:${h}%" title="${pct}%"></div></div><div class="sc-x">${esc(fmtDateShort(r.startDate))}</div><div class="sc-v">${r.rate < 0 ? "–" : pct + "%"}</div></div>`;
+      })
+      .join("")}</div>`;
+
     // Overspend patterns across all closed periods.
     const overCount = {};
     closed.forEach((p) =>
@@ -2520,6 +2603,11 @@
         <h2>Saved per period</h2>
         <p class="sub">Most recent ${chrono.length} period${chrono.length === 1 ? "" : "s"}.</p>
         ${chart}
+      </div>
+      <div class="card">
+        <h2>Save rate</h2>
+        <p class="sub">Share of income kept — averaging <b>${Math.round(avgRate * 100)}%</b> over the last ${chrono.length} period${chrono.length === 1 ? "" : "s"}.</p>
+        ${rateChart}
       </div>
       ${
         topOver.length
@@ -3239,11 +3327,13 @@
     return { csv: rows.map((r) => r.map(q).join(",")).join("\r\n"), count };
   }
 
-  // Export the transactions CSV as a download.
-  function exportCSV() {
+  // Export ALL transactions (every period) as a download. Distinct from the
+  // Reports tab's per-period exportCSV(p).
+  function exportAllCSV() {
     const { csv, count } = transactionsCSV(state);
     if (!count) { showToast("No transactions to export yet."); return; }
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    // Prepend a BOM so Excel reads UTF-8 (emoji, accents) correctly.
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -3385,7 +3475,7 @@
       });
 
     document.getElementById("set-export").addEventListener("click", exportData);
-    document.getElementById("set-export-csv").addEventListener("click", exportCSV);
+    document.getElementById("set-export-csv").addEventListener("click", exportAllCSV);
 
     document.getElementById("set-import-file").addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
@@ -3884,6 +3974,56 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * First-run onboarding — a 3-step intro so a brand-new visitor (esp. the
+   * public Beta) isn't dropped straight into an empty budget.
+   * ------------------------------------------------------------------ */
+  const ONBOARDED_KEY = () => STORAGE_KEY + "-onboarded";
+  function openOnboarding() {
+    const steps = [
+      { emoji: "💸", title: "Budget by paycheck", body: "Yosan budgets one paycheck at a time — tell it what you were paid, split it across categories, and see exactly what's left until your next payday." },
+      { emoji: "🗂️", title: "Give every dollar a job", body: "Set an amount for rent, groceries, fun, savings… Fixed bills and everyday spending are tracked separately, so nothing sneaks up on you." },
+      { emoji: "⚡", title: "Log as you go", body: "Tap “Log Spend” — or just type “38 ramen” — to record a purchase. Watch your daily pace, then start a fresh budget each payday." },
+    ];
+    let i = 0;
+    const { close } = mountModal(`<div class="modal-overlay"><div class="modal onb-modal" role="dialog" aria-modal="true" aria-label="Welcome to Yosan"><div id="onb-body"></div></div></div>`);
+    const done = () => {
+      try { localStorage.setItem(ONBOARDED_KEY(), "1"); } catch (e) {}
+      close();
+    };
+    function paint() {
+      const s = steps[i];
+      const dots = steps.map((_, k) => `<span class="onb-dot ${k === i ? "on" : ""}" aria-hidden="true"></span>`).join("");
+      document.getElementById("onb-body").innerHTML = `
+        <div class="onb-emoji">${s.emoji}</div>
+        <h2 class="onb-title">${esc(s.title)}</h2>
+        <p class="onb-text">${esc(s.body)}</p>
+        <div class="onb-dots">${dots}</div>
+        <div class="onb-actions">
+          ${i > 0 ? `<button class="btn btn-ghost" id="onb-back" style="flex:1;">Back</button>` : `<button class="btn btn-ghost" id="onb-skip" style="flex:1;">Skip</button>`}
+          <button class="btn btn-primary" id="onb-next" style="flex:2;">${i === steps.length - 1 ? "Get started →" : "Next"}</button>
+        </div>`;
+      const back = document.getElementById("onb-back");
+      if (back) back.addEventListener("click", () => { i--; paint(); });
+      const skip = document.getElementById("onb-skip");
+      if (skip) skip.addEventListener("click", done);
+      document.getElementById("onb-next").addEventListener("click", () => {
+        if (i === steps.length - 1) done();
+        else { i++; paint(); }
+      });
+    }
+    paint();
+  }
+  function maybeShowOnboarding() {
+    if (state.periods.length) return; // only brand-new users
+    let seen = false;
+    try { seen = !!localStorage.getItem(ONBOARDED_KEY()); } catch (e) {}
+    if (seen) return;
+    // Suppress the one-time sign-in prompt this session so two modals don't stack.
+    try { localStorage.setItem("pb-login-prompted", "1"); } catch (e) {}
+    openOnboarding();
+  }
+
+  /* ------------------------------------------------------------------ *
    * Tab navigation
    * ------------------------------------------------------------------ */
   document.getElementById("tabs").addEventListener("click", (e) => {
@@ -3929,7 +4069,7 @@
       window.__yosanTest = {
         parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
         mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
-        transactionsCSV,
+        transactionsCSV, saveRateSeries,
         setState: (s) => { state = s; },
         getState: () => state,
       };
@@ -3939,4 +4079,5 @@
   /* Boot */
   render();
   initCloud();
+  maybeShowOnboarding();
 })();

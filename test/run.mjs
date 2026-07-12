@@ -149,6 +149,19 @@ eq(T.fmt(-50), "-$50.00", "fmt: negative");
 eq(T.fmt(0), "$0.00", "fmt: zero");
 eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
 
+/* ---- saveRateSeries (Reports save-rate trend) ------------------------ */
+{
+  const series = T.saveRateSeries([
+    { startDate: "2026-01-01", paycheckAmount: 2000, extraIncome: [], categories: [], transactions: [{ amount: 500 }] },
+    { startDate: "2026-02-01", paycheckAmount: 1000, extraIncome: [], categories: [], transactions: [{ amount: 1000 }] },
+    { startDate: "2026-03-01", paycheckAmount: 0, extraIncome: [], categories: [], transactions: [] },
+  ]);
+  eq(series.length, 3, "saverate: length");
+  eq(series[0].rate, 0.75, "saverate: (2000-500)/2000 = 0.75");
+  eq(series[1].rate, 0, "saverate: broke even → 0");
+  eq(series[2].rate, 0, "saverate: zero income guarded to 0");
+}
+
 /* ---- transactionsCSV (header, ordering, escaping) -------------------- */
 {
   const st = {
