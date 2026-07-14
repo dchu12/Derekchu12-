@@ -149,6 +149,27 @@ eq(T.fmt(-50), "-$50.00", "fmt: negative");
 eq(T.fmt(0), "$0.00", "fmt: zero");
 eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
 
+/* ---- savings counts as saved, not spent ------------------------------ */
+{
+  const p = {
+    startDate: "2026-07-01", paycheckAmount: 2600, extraIncome: [],
+    categories: [
+      { id: "rent", name: "Rent", budgeted: 1200, fixed: true },
+      { id: "food", name: "Groceries", budgeted: 500 },
+      { id: "sav", name: "Savings", budgeted: 500 },
+    ],
+    transactions: [
+      { categoryId: "rent", amount: 1200 },
+      { categoryId: "food", amount: 400 },
+      { categoryId: "sav", amount: 500 }, // transfer into savings
+    ],
+  };
+  eq(T.periodConsumed(p), 1600, "consumed excludes the savings transfer (1200+400)");
+  eq(T.periodSaved(p), 1000, "saved = income - consumed = 2600 - 1600 (savings counts as saved)");
+  const r = T.saveRateSeries([p]);
+  eq(Math.round(r[0].rate * 100), 38, "save rate positive (1000/2600) — savings no longer sinks it");
+}
+
 /* ---- saveRateSeries (Reports save-rate trend) ------------------------ */
 {
   const series = T.saveRateSeries([

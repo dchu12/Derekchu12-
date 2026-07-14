@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "122";
+  const APP_VERSION = "123";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -330,7 +330,7 @@
       const m = months[mk] || (months[mk] = { income: 0, budgeted: 0, spent: 0, cats: {} });
       m.income += periodIncome(p);
       m.budgeted += totalBudgeted(p);
-      m.spent += totalSpent(p);
+      m.spent += periodConsumed(p); // "spent" here excludes savings so income = spent + saved
       p.categories.forEach((c) => {
         const cc = m.cats[c.name] || (m.cats[c.name] = { emoji: c.emoji || "", budgeted: 0, spent: 0 });
         cc.budgeted += Number(c.budgeted || 0);
@@ -358,8 +358,15 @@
       });
     return { name: PERSON_NAME, updatedAt: Date.now(), months: list };
   }
-  // Actual money saved in a period = income minus everything spent.
-  const periodSaved = (p) => periodIncome(p) - totalSpent(p);
+  // Money actually consumed this period = spending that ISN'T a transfer into a
+  // savings/goal category (funding savings is keeping money, not spending it).
+  const periodConsumed = (p) => {
+    const sav = new Set((p.categories || []).filter(isSavingsCat).map((c) => c.id));
+    return p.transactions.reduce((s, t) => s + (sav.has(t.categoryId) ? 0 : Number(t.amount)), 0);
+  };
+  // Money saved in a period = income minus what was consumed. So money moved into
+  // a savings category counts as saved, not spent — matching the dashboard.
+  const periodSaved = (p) => periodIncome(p) - periodConsumed(p);
   // Cumulative savings across all closed (finished) periods.
   const totalSavedToDate = () =>
     state.periods.filter((p) => p.closed).reduce((s, p) => s + periodSaved(p), 0);
@@ -593,7 +600,7 @@
     // Only occasionally interrupt with a data projection — the book quotes are
     // the star, so keep this rare.
     if (dl > 0 && elapsed >= 3 && timeFrac > 0) {
-      const projSaved = periodIncome(p) - totalSpent(p) / timeFrac;
+      const projSaved = periodIncome(p) - periodConsumed(p) / timeFrac;
       if (projSaved > 0.005 && Math.random() < 0.18) {
         return { tone: "ok", text: `📊 At your current pace, you're on track to save about ${fmt(projSaved)} this period — keep it up!` };
       }
@@ -2566,17 +2573,26 @@
     const hasHomeHistory = nH > 0;
     const totalSaved = closedHome.reduce((s, p) => s + periodSaved(p), 0);
     const avgSaved = nH ? totalSaved / nH : 0;
-    const avgSpent = nH ? closedHome.reduce((s, p) => s + totalSpent(p), 0) / nH : 0;
+    const avgSpent = nH ? closedHome.reduce((s, p) => s + periodConsumed(p), 0) / nH : 0;
 
     // Savings per period — oldest→newest, most recent 8.
     const chrono = closedHome.slice().reverse().slice(-8);
     const svals = chrono.map((p) => periodSaved(p));
     const smax = Math.max(1, ...svals.map((v) => Math.abs(v)));
-    const chart = `<div class="savings-chart">${chrono
+    // Diverging bar chart: kept (green, up) vs overspent (red, down) around a zero line.
+    const chart = `<div class="dv-chart"><div class="dv-zero" aria-hidden="true"></div>${chrono
       .map((p, i) => {
         const v = svals[i];
-        const h = Math.max(4, Math.round((Math.abs(v) / smax) * 100));
-        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${v < 0 ? "neg" : ""}" style="height:${h}%" title="${fmt(v)}"></div></div><div class="sc-x">${esc(fmtDateShort(p.startDate))}</div><div class="sc-v">${esc(fmtCompact(v))}</div></div>`;
+        const h = Math.max(3, Math.round((Math.abs(v) / smax) * 46));
+        const pos = v >= 0;
+        return `<div class="dv-col">
+          <div class="dv-bars">
+            <div class="dv-slot dv-pos">${pos ? `<div class="dv-bar pos" style="height:${h}px" title="${esc(fmt(v))}"></div>` : ""}</div>
+            <div class="dv-slot dv-neg">${!pos ? `<div class="dv-bar neg" style="height:${h}px" title="${esc(fmt(v))}"></div>` : ""}</div>
+          </div>
+          <div class="dv-x">${esc(fmtDateShort(p.startDate))}</div>
+          <div class="dv-v ${pos ? "" : "neg"}">${esc(fmtCompact(v))}</div>
+        </div>`;
       })
       .join("")}</div>`;
 
@@ -2670,7 +2686,7 @@
     const items = closed
       .map((p) => {
         setCur(curOf(p)); // format each row in its own currency
-        const spent = totalSpent(p);
+        const spent = periodConsumed(p);
         const saved = periodSaved(p);
         const vacTag = periodKind(p) === "vacation" ? ` · 🏖️ ${curOf(p)}` : "";
         return `
@@ -2694,10 +2710,9 @@
         <div class="ins-label">Total saved to date</div>
         <div class="ins-amount ${totalSaved < 0 ? "neg" : ""}">${fmt(totalSaved)}</div>
         <div class="ins-sub">across ${nH} pay period${nH === 1 ? "" : "s"} · avg ${fmt(avgSaved)} saved · ${fmt(avgSpent)} spent</div>
-      </div>
-      <div class="card">
-        <h2>Saved per period</h2>
-        <p class="sub">Most recent ${chrono.length} period${chrono.length === 1 ? "" : "s"}.</p>
+        <div class="ins-divider"></div>
+        <h2 style="margin:0 0 2px;">Saved per period</h2>
+        <p class="sub">Most recent ${chrono.length} period${chrono.length === 1 ? "" : "s"} · <span class="dv-key pos">kept</span> vs <span class="dv-key neg">overspent</span>.</p>
         ${chart}
       </div>
       <div class="card">
@@ -2931,7 +2946,7 @@
     setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
     const income = periodIncome(p);
-    const spent = totalSpent(p);
+    const spent = periodConsumed(p);
     const budgeted = totalBudgeted(p);
     const saved = periodSaved(p);
     const rate = income > 0 ? Math.round((saved / income) * 100) : 0;
@@ -3106,7 +3121,7 @@
    * ------------------------------------------------------------------ */
   function buildReport(p) {
     const budgeted = totalBudgeted(p);
-    const spent = totalSpent(p);
+    const spent = periodConsumed(p); // savings-funding counts as saved, not spent
     const remaining = budgeted - spent;
     const saved = periodIncome(p) - spent;
     const unbudgeted = periodIncome(p) - budgeted;
@@ -4189,7 +4204,7 @@
       window.__yosanTest = {
         parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
         mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
-        transactionsCSV, saveRateSeries,
+        transactionsCSV, saveRateSeries, periodConsumed, periodSaved,
         setState: (s) => { state = s; },
         getState: () => state,
       };

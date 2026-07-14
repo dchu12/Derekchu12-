@@ -911,3 +911,22 @@ textarea:focus-visible,
 /* Reports segmented Insights/History control */
 .report-seg { margin-bottom: 12px; }
 .report-seg .chip { flex: 1; text-align: center; }
+
+/* ---- Diverging saved-per-period chart (zero baseline) ------------------ */
+.ins-divider { height: 1px; background: var(--border); margin: 16px 0 14px; }
+.dv-chart { position: relative; display: flex; align-items: flex-start; gap: 8px; padding-top: 2px; }
+.dv-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.dv-bars { width: 100%; height: 96px; display: flex; flex-direction: column; }
+.dv-slot { height: 48px; width: 100%; display: flex; justify-content: center; }
+.dv-slot.dv-pos { align-items: flex-end; }
+.dv-slot.dv-neg { align-items: flex-start; }
+.dv-bar { width: 62%; max-width: 30px; border-radius: 4px; }
+.dv-bar.pos { background: var(--good); }
+.dv-bar.neg { background: var(--danger); }
+.dv-zero { position: absolute; left: 0; right: 0; top: 48px; height: 2px; background: var(--border); border-radius: 2px; }
+.dv-x { font-size: 10px; color: var(--text-dim); margin-top: 6px; text-align: center; }
+.dv-v { font-size: 11px; font-weight: 700; color: var(--text); margin-top: 1px; }
+.dv-v.neg { color: var(--danger); }
+.dv-key { font-weight: 700; }
+.dv-key.pos { color: var(--good); }
+.dv-key.neg { color: var(--danger); }
