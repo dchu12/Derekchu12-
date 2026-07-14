@@ -1,6 +1,6 @@
 # Yosan — Roadmap & saved plans
 
-_Last updated: 2026-07-14. Live version at time of writing: **v120**._
+_Last updated: 2026-07-14. Live version at time of writing: **v122**._
 
 Three deployments, kept in sync on every change (now generated from one
 source — edit `src/app.js`, run `npm run build`; see the README):
@@ -16,11 +16,13 @@ source — edit `src/app.js`, run `npm run build`; see the README):
 3. **#4 Household linking** — optional sign-up + two-person shared summaries. Needs Email/Password sign-up enabled + the household Firestore rules. Decisions are locked (below). Pairs with tightening `isKelly()`/`isCore()` into real membership.
 
 **App-side follow-ups (no console needed, do anytime):**
-4. **Public sign-up flow** — add a "Create account" option to the sign-in screen (only after #1 is published and budgets are keyed per-uid, so new users can't read Kelly/Derek data).
-5. **Admin "reset / delete a user's data"** — currently the admin can Pause/Enable (revoke access) only; a guarded destructive reset was intentionally left out. Add if wanted.
-6. **Single-source the styles too (optional)** — `styles.css`/`index.html`/`manifest.json` are still per-deployment (theme colors, tab set). Could tokenize the accent color + firebase/tab differences into the build like `app.js`.
+4. **Savings shouldn't count as "spent" (next focused session)** — a transfer into a Savings/goal category is logged as a spend, so `periodSaved = income − totalSpent` counts saving as spending. Result: a period where you saved aggressively can read as "overspent / negative save rate," which now clashes with the dashboard showing Savings as green/positive. Fix: treat `isSavingsCat` spend as *saved*, not *spent*, consistently across `periodSaved`/`totalSpent` usage in History totals, Results, the save-rate trend, and the recap card. Deeper than it looks (touches several screens) — do it as its own session with before/after screenshots + a test for the saved-math.
+5. **Public sign-up flow** — add a "Create account" option to the sign-in screen (only after #1 is published and budgets are keyed per-uid, so new users can't read Kelly/Derek data).
+6. **Admin "reset / delete a user's data"** — currently the admin can Pause/Enable (revoke access) only; a guarded destructive reset was intentionally left out. Add if wanted.
+7. **Reports IA — round two (optional)** — v122 added a segmented Insights/History control. Could go further: collapsible cards, a zero-baseline on the mini bar-charts, or leading with the 2–3 highest-value insights.
+8. **Single-source the styles too (optional)** — `styles.css`/`index.html`/`manifest.json` are still per-deployment (theme colors, tab set). Could tokenize the accent color + firebase/tab differences into the build like `app.js`.
 
-_Shipped this session (v116–v120): quick-add thousands-comma fix; Guest/Member/Admin roles + admin panel; test harness + CI; single-source build; CSV export; Reports save-rate trend; Spend search + date range; first-run onboarding; tightened Firestore rules; update-available toast; accessibility pass._
+_Shipped so far (v116–v122): quick-add thousands-comma fix; Guest/Member/Admin roles + admin panel; test harness + CI; single-source build; CSV export; Reports save-rate trend; Spend search + date range; first-run onboarding; tightened Firestore rules; update-available toast; accessibility pass; savings-shown-as-positive; dark mode; ~40 more coach book quotes (more frequent, gentler on overspending); over-allocated hint; segmented Reports (Insights/History)._
 
 ## Shipped (game-changer roadmap)
 - ✅ **#1 Natural-language quick add** (v90) — type "38 ramen" → parses amount + category + note, Enter to save.
