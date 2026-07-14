@@ -38,7 +38,7 @@
    // Roles + app config (feature flags / broadcast). All optional; the app is
    // fully usable signed out or when Firebase isn't available.
    let appConfig = null;        // latest app/config doc, or null
-@@ -83,12 +91,11 @@
+@@ -86,12 +94,11 @@
    let bannerDismissed =
      Date.now() - Number(localStorage.getItem(STORAGE_KEY + "-banner-dismissed") || 0) < 30 * 86400000;
  
@@ -54,7 +54,7 @@
        st.view = "dashboard"; // always land on Overview after a refresh
        return st;
      } catch (e) {
-@@ -97,11 +104,11 @@
+@@ -100,11 +107,11 @@
      }
    }
  
@@ -70,7 +70,7 @@
      } catch (e) {
        console.error("Failed to save state", e);
      }
-@@ -109,8 +116,18 @@
+@@ -112,8 +119,18 @@
  
    function save() {
      state.updatedAt = Date.now();
@@ -91,7 +91,7 @@
    }
  
    /* ------------------------------------------------------------------ *
-@@ -254,7 +271,6 @@
+@@ -257,7 +274,6 @@
     * people never drops a transaction.
     * ------------------------------------------------------------------ */
  
@@ -99,7 +99,7 @@
    function deleteTxn(p, txnId) {
      const idx = p.transactions.findIndex((t) => t.id === txnId);
      if (idx === -1) return null;
-@@ -264,14 +280,12 @@
+@@ -267,14 +283,12 @@
      return { removed, idx };
    }
  
@@ -114,7 +114,7 @@
    function mergeTransactions(localP, remoteP) {
      const tomb = {};
      const addTomb = (m) => {
-@@ -293,7 +307,6 @@
+@@ -296,7 +310,6 @@
      return { transactions: live, deletedTxnIds: tomb };
    }
  
@@ -122,7 +122,7 @@
    function mergePeriods(local, merged) {
      const localById = {};
      (local.periods || []).forEach((p) => (localById[p.id] = p));
-@@ -307,7 +320,6 @@
+@@ -310,7 +323,6 @@
          rp.deletedTxnIds = m.deletedTxnIds;
        }
      });
@@ -130,7 +130,7 @@
      (local.periods || []).forEach((lp) => {
        if (!seen[lp.id]) merged.periods.push(lp);
      });
-@@ -317,9 +329,9 @@
+@@ -320,9 +332,9 @@
    }
  
    // Month-by-month summary for the shared Results view (published to Firestore).
@@ -142,7 +142,7 @@
        if (kind && periodKind(p) !== kind) return; // scope to one budget type
        const mk = (p.startDate || "").slice(0, 7); // YYYY-MM
        if (!mk) return;
-@@ -352,7 +364,7 @@
+@@ -355,7 +367,7 @@
            })),
          };
        });
@@ -151,7 +151,7 @@
    }
    // Actual money saved in a period = income minus everything spent.
    const periodSaved = (p) => periodIncome(p) - totalSpent(p);
-@@ -458,12 +470,12 @@
+@@ -470,12 +482,12 @@
          text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
        };
      }
@@ -167,44 +167,7 @@
        "🎯 Bang on budget. This is exactly what winning looks like.",
        "🍃 Calm and steady — your budget's breathing easy this period.",
        "⛵ Smooth sailing. You're gliding through this one with room to spare.",
-@@ -494,30 +506,30 @@
-       "⚖️ Spend on today, save for tomorrow — you've found the balance this period.",
-       "🌰 Big oaks come from steadily planted acorns. Keep planting.",
-       // The Psychology of Money (Morgan Housel)
--      "✨ “Saving is the gap between your ego and your income.” You're minding that gap beautifully. — The Psychology of Money",
-+      "✨ “Saving is the gap between your ego and your income.” You're minding that gap well. — The Psychology of Money",
-       "💰 “Wealth is what you don't see.” Every dollar you don't spend is quietly becoming your freedom. — The Psychology of Money",
-       "🕊️ “Controlling your time is the highest dividend money pays.” Staying on budget buys more of it. — The Psychology of Money",
-       "🌱 “Building wealth has little to do with your income and a lot to do with your savings rate.” You're doing the part that matters. — The Psychology of Money",
--      "☕ “Spending money to show people how much money you have is the fastest way to have less.” Nice and steady wins. — The Psychology of Money",
-+      "☕ “Spending money to show people how much money you have is the fastest way to have less.” Steady wins. — The Psychology of Money",
-       "🎩 “The ability to do what you want, when you want, is priceless.” Your budget is buying that. — The Psychology of Money",
-       "🛡️ “Room for error is what lets you endure.” You're leaving yourself some — smart. — The Psychology of Money",
-       "😌 “Enough” is knowing when to stop moving the goalposts. You seem to know yours. — The Psychology of Money",
-       "🌰 Compounding rewards patience, not intensity. You're giving it time. — The Psychology of Money",
-       // The Art of Spending Money (Morgan Housel)
--      "🛍️ “Spending money is easy. Spending it well is a skill.” And you're getting good at it. — The Art of Spending Money",
--      "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you love. — The Art of Spending Money",
-+      "🛍️ “Spending money is easy. Spending it well is a skill.” And you're sharpening it. — The Art of Spending Money",
-+      "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you value. — The Art of Spending Money",
-       "🧭 “The whole point of money is to give you independence and freedom.” Every mindful choice buys a little more. — The Art of Spending Money",
-       "🎁 The best purchases buy better days, not just nicer things. You're spending with intention. — The Art of Spending Money",
-       "🍷 Spending well means matching money to what you actually value. You're aligned this period. — The Art of Spending Money",
-       "🌅 Money's real job is to improve how you feel about your days. Looks like it's doing its job. — The Art of Spending Money",
-     ];
--    // Celebrate any savings/goal category she's fully funded this period.
-+    // Celebrate any savings/goal category fully funded this period.
-     const funded = p.categories.filter(
-       (c) => c.budgeted > 0 && isSavingsCat(c) && catSpent(p, c.id) >= c.budgeted - 0.005
-     );
-     if (funded.length) {
-       lines.unshift(
--        `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
-+        `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Nicely done!`
-       );
-     }
-     // Every so often, surface a data-aware projection instead of a quote so the
-@@ -1195,7 +1207,6 @@
+@@ -1232,7 +1244,6 @@
          closed: false,
          createdAt: new Date().toISOString(),
        };
@@ -212,7 +175,7 @@
        cats.forEach((c) => {
          if (c.fixed && c.budgeted > 0) {
            period.transactions.push({
-@@ -1540,7 +1551,7 @@
+@@ -1608,7 +1619,7 @@
      document.getElementById("ev-go").addEventListener("click", () => {
        p.closed = true;
        p.closedAt = new Date().toISOString();
@@ -221,7 +184,7 @@
        save();
        close();
        render();
-@@ -2297,7 +2308,7 @@
+@@ -2426,7 +2437,7 @@
      const plural = cats.length > 1;
      const subject = `⚠️ Over budget: ${cats.map((c) => c.name).join(", ")}`;
      const body =
@@ -230,7 +193,7 @@
        cats
          .map((c) => {
            const cs = catSpent(p, c.id);
-@@ -2314,7 +2325,7 @@
+@@ -2443,7 +2454,7 @@
            <h2 style="text-align:center;">Over budget</h2>
            <p class="sub" style="text-align:center;">Heads up — this spending puts ${plural ? "these categories" : "this category"} over budget.</p>
            <ul class="ob-list">${detail}</ul>
@@ -239,7 +202,7 @@
            <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled message to ${esc(REPORT_EMAILS.join(" and "))}.</p>
            <button class="btn btn-ghost btn-block" id="ob-dismiss">Dismiss</button>
          </div>
-@@ -3082,11 +3093,12 @@
+@@ -3229,11 +3240,12 @@
    }
  
    // Render the user's own monthly results from local data, scoped to one
@@ -255,7 +218,7 @@
      if (!mine.months.length) {
        main.innerHTML = `<div class="card"><h2>${isVac ? "Vacation results" : "Your results"}</h2><p class="sub">${isVac ? "Once you log spending on a vacation budget, each trip's totals show up here." : "Once you finish a pay period, each month's income, spending, and savings show up here."}</p></div>`;
        return;
-@@ -3318,6 +3330,14 @@
+@@ -3467,6 +3479,14 @@
           <button class="btn btn-primary btn-block" id="set-admin">🛠️ Open admin panel</button>
           <p class="footer-note" style="margin:6px 0 0;">Manage users, view accounts, broadcast a message, and toggle features.</p>`
        : "";
@@ -270,7 +233,7 @@
      const { close } = mountModal(`
        <div class="modal-overlay">
          <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
-@@ -3328,6 +3348,8 @@
+@@ -3477,6 +3497,8 @@
  
            ${adminBlock}
  
@@ -279,7 +242,7 @@
            ${flagOn("vacationMode", true) ? `<div class="section-label set-sec">Preferences</div>
            <div class="vac-row">
              <div class="vac-copy">
-@@ -3378,6 +3400,15 @@
+@@ -3527,6 +3549,15 @@
          openAdminPanel();
        });
  
@@ -295,7 +258,7 @@
      const vacToggle = document.getElementById("set-vacation");
      if (vacToggle)
        vacToggle.addEventListener("change", () => {
-@@ -3733,92 +3764,125 @@
+@@ -3884,92 +3915,125 @@
    }
  
    function startSync() {

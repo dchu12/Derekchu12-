@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "120";
+  const APP_VERSION = "121";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -89,6 +89,7 @@
   let adminPanelRefresh = null;// re-render hook while the admin panel is open
   // Spend-tab search/date filters — transient per-session (never persisted or synced).
   let _spendQuery = "", _spendFrom = "", _spendTo = "";
+  let _heroAnimated = false; // count up the "left to spend" hero once per session
   // Data-safety banner: stays dismissed for 30 days once closed (persisted), so it doesn't nag.
   let bannerDismissed =
     Date.now() - Number(localStorage.getItem(STORAGE_KEY + "-banner-dismissed") || 0) < 30 * 86400000;
@@ -517,30 +518,54 @@
       "⚖️ Spend on today, save for tomorrow — you've found the balance this period.",
       "🌰 Big oaks come from steadily planted acorns. Keep planting.",
       // The Psychology of Money (Morgan Housel)
-      "✨ “Saving is the gap between your ego and your income.” You're minding that gap well. — The Psychology of Money",
+      "✨ “Saving is the gap between your ego and your income.” You're minding that gap beautifully. — The Psychology of Money",
       "💰 “Wealth is what you don't see.” Every dollar you don't spend is quietly becoming your freedom. — The Psychology of Money",
       "🕊️ “Controlling your time is the highest dividend money pays.” Staying on budget buys more of it. — The Psychology of Money",
       "🌱 “Building wealth has little to do with your income and a lot to do with your savings rate.” You're doing the part that matters. — The Psychology of Money",
-      "☕ “Spending money to show people how much money you have is the fastest way to have less.” Steady wins. — The Psychology of Money",
+      "☕ “Spending money to show people how much money you have is the fastest way to have less.” Nice and steady wins. — The Psychology of Money",
       "🎩 “The ability to do what you want, when you want, is priceless.” Your budget is buying that. — The Psychology of Money",
       "🛡️ “Room for error is what lets you endure.” You're leaving yourself some — smart. — The Psychology of Money",
       "😌 “Enough” is knowing when to stop moving the goalposts. You seem to know yours. — The Psychology of Money",
       "🌰 Compounding rewards patience, not intensity. You're giving it time. — The Psychology of Money",
       // The Art of Spending Money (Morgan Housel)
-      "🛍️ “Spending money is easy. Spending it well is a skill.” And you're sharpening it. — The Art of Spending Money",
-      "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you value. — The Art of Spending Money",
+      "🛍️ “Spending money is easy. Spending it well is a skill.” And you're getting good at it. — The Art of Spending Money",
+      "👑 “The highest form of wealth is not caring what other people think about what you buy.” Spend on what you love. — The Art of Spending Money",
       "🧭 “The whole point of money is to give you independence and freedom.” Every mindful choice buys a little more. — The Art of Spending Money",
       "🎁 The best purchases buy better days, not just nicer things. You're spending with intention. — The Art of Spending Money",
       "🍷 Spending well means matching money to what you actually value. You're aligned this period. — The Art of Spending Money",
       "🌅 Money's real job is to improve how you feel about your days. Looks like it's doing its job. — The Art of Spending Money",
+      // More from The Psychology of Money (Morgan Housel)
+      "🧠 “Doing well with money has a little to do with how smart you are and a lot to do with how you behave.” — The Psychology of Money",
+      "⏰ “Money's greatest intrinsic value is its ability to give you control over your time.” You're buying some back. — The Psychology of Money",
+      "🌅 “The highest form of wealth is the ability to wake up every morning and say, ‘I can do whatever I want today.’” — The Psychology of Money",
+      "🐷 “Save. Just save. You don't need a specific reason to save.” And you are. — The Psychology of Money",
+      "🌰 “The first rule of compounding is to never interrupt it unnecessarily.” Keep it running. — The Psychology of Money",
+      "😴 “Manage your money in a way that helps you sleep at night.” Restful math this period. — The Psychology of Money",
+      "🛡️ “There is no reason to risk what you have and need for what you don't have and don't need.” Steady wins. — The Psychology of Money",
+      "⚖️ “Being reasonable is more realistic, and you have a better chance of sticking with it for the long run.” — The Psychology of Money",
+      "🗺️ “Plan on your plan not going according to plan.” The room you've left is exactly that cushion. — The Psychology of Money",
+      "🤫 “Less ego, more wealth.” Quietly building — no need to flex. — The Psychology of Money",
+      "🌗 “Nothing is as good or as bad as it seems.” Calm consistency beats the swings. — The Psychology of Money",
+      "🙂 “Happiness is results minus expectations.” Spending on what you value keeps that gap kind. — The Psychology of Money",
+      "💵 “Wealth is the nice cars not purchased, the jewelry not bought.” The options you kept are the point. — The Psychology of Money",
+      "🧗 Getting money takes risk; keeping it takes humility and a little fear. You're keeping it. — The Psychology of Money",
+      "🏛️ Independence — doing what you want, when you want — is the dividend a savings habit pays. — The Psychology of Money",
+      // More from The Art of Spending Money (Morgan Housel)
+      "🧭 Money buys the most happiness when it buys control over your own time. — The Art of Spending Money",
+      "🎨 Spending well is less about the price and more about the fit with your life. You're fitting it. — The Art of Spending Money",
+      "🌱 The goal was never to spend as little as possible — it's to spend on what truly improves your days. — The Art of Spending Money",
+      "🕯️ Quiet, intentional spending beats loud, impressive spending every time. — The Art of Spending Money",
+      "🚪 Independence is the best thing money can buy, and you buy it a little at a time. — The Art of Spending Money",
+      "🍽️ The best money you spend often buys time, calm, or people you love — not stuff. — The Art of Spending Money",
+      "🎈 Enough isn't a number; it's a feeling of not needing more to feel okay. You're near it. — The Art of Spending Money",
     ];
-    // Celebrate any savings/goal category fully funded this period.
+    // Celebrate any savings/goal category she's fully funded this period.
     const funded = p.categories.filter(
       (c) => c.budgeted > 0 && isSavingsCat(c) && catSpent(p, c.id) >= c.budgeted - 0.005
     );
     if (funded.length) {
       lines.unshift(
-        `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Nicely done!`
+        `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
       );
     }
     // Every so often, surface a data-aware projection instead of a quote so the
@@ -1247,6 +1272,25 @@
   }
 
   /* ---------- Dashboard ---------- */
+  // Subtle count-up for the hero amount (once per session; respects reduced motion).
+  function animateHeroAmount(to) {
+    const el = main.querySelector(".hero .amount");
+    if (!el) return;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || typeof requestAnimationFrame !== "function") { el.textContent = fmt(to); return; }
+    const dur = 650;
+    let start = null;
+    const step = (now) => {
+      if (start === null) start = now;
+      const t = Math.min(1, (now - start) / dur);
+      const ease = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmt(to * ease);
+      if (t < 1) requestAnimationFrame(step);
+      else el.textContent = fmt(to);
+    };
+    requestAnimationFrame(step);
+  }
+
   function renderDashboard(p) {
     setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
@@ -1263,12 +1307,18 @@
 
     const renderCat = (c) => {
       const cs = catSpent(p, c.id);
+      const isSav = isSavingsCat(c);
       const pct = c.budgeted > 0 ? (cs / c.budgeted) * 100 : 0;
-      const cls = pct > 100 ? "over" : c.fixed ? "ok" : pct > 85 ? "warn" : "ok";
-      const over = cs > c.budgeted + 0.005;
+      // Savings/goal categories are money set aside on purpose — funding them is a
+      // win, never "over budget" and never a warning.
+      const over = !isSav && cs > c.budgeted + 0.005;
+      const funded = isSav && cs >= c.budgeted - 0.005;
+      const cls = isSav ? "good" : over ? "over" : c.fixed ? "ok" : pct > 85 ? "warn" : "ok";
       const pctLabel = c.budgeted > 0 ? Math.round(pct) + "%" : "—";
-      const remainAmt = over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs);
-      const remainLabel = over ? "over" : "left";
+      const remainAmt = isSav
+        ? (funded ? fmt(cs) : fmt(c.budgeted - cs))
+        : (over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs));
+      const remainLabel = isSav ? (funded ? "saved" : "to go") : (over ? "over" : "left");
       const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill" aria-label="Fixed bill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="9.5" rx="2.5"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg></span>` : "";
       return `
         <button type="button" class="cat-row cat-row-tap ${over ? "is-over" : ""}" data-cat="${c.id}"
@@ -1281,7 +1331,7 @@
             </span>
             <span class="cat-line cat-sub">
               <span class="cat-spent"><b>${fmt(cs)}</b> of ${fmt(c.budgeted)}</span>
-              <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
+              <span class="cat-left ${over ? "over" : ""}${isSav ? " saved" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
             </span>
             <span class="bar"><span class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span>
           </span>
@@ -1346,7 +1396,6 @@
       ${dl === 0 ? (isVac
           ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🏖️ Your vacation ended — close it out</button>`
           : `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>`) : ""}
-      ${safetyBanner}
       <div class="card hero">
         <div class="hero-main">
           <div class="hero-eyebrow">Left to spend</div>
@@ -1368,6 +1417,8 @@
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
 
+      ${safetyBanner}
+
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Expense Categories</h2>
@@ -1385,10 +1436,15 @@
           <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
           <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
         </div>
+        ${budgeted > periodIncome(p) + 0.005
+          ? `<div class="stat-hint">⚠️ You've budgeted ${fmt(budgeted - periodIncome(p))} more than your income — trim a category to give every dollar a job.</div>`
+          : ""}
       </div>
 
       <button class="btn btn-block btn-payday" id="new-payday">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
     `;
+
+    if (!_heroAnimated) { _heroAnimated = true; try { animateHeroAmount(remaining); } catch (e) {} }
 
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     const catLog = document.getElementById("cat-log-spend");
@@ -1918,7 +1974,7 @@
     // Top categories = discretionary only (exclude fixed bills — they don't vary).
     const catTotals = p.categories
       .map((c) => ({ c, amt: catSpent(p, c.id) }))
-      .filter((x) => x.amt > 0 && !x.c.fixed)
+      .filter((x) => x.amt > 0 && !x.c.fixed && !isSavingsCat(x.c))
       .sort((a, b) => b.amt - a.amt);
     const discTotal = catTotals.reduce((s, x) => s + x.amt, 0);
     const topCats = catTotals.slice(0, 3);
@@ -2506,7 +2562,7 @@
       .map((r) => {
         const pct = Math.round(r.rate * 100);
         const h = r.rate <= 0 ? 4 : Math.max(4, Math.min(100, pct));
-        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${r.rate < 0 ? "neg" : ""}" style="height:${h}%" title="${pct}%"></div></div><div class="sc-x">${esc(fmtDateShort(r.startDate))}</div><div class="sc-v">${r.rate < 0 ? "–" : pct + "%"}</div></div>`;
+        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${r.rate < 0 ? "neg" : ""}" style="height:${h}%" title="${pct}%"></div></div><div class="sc-x">${esc(fmtDateShort(r.startDate))}</div><div class="sc-v ${r.rate < 0 ? "neg" : ""}">${pct}%</div></div>`;
       })
       .join("")}</div>`;
 
@@ -2514,6 +2570,7 @@
     const overCount = {};
     closed.forEach((p) =>
       p.categories.forEach((c) => {
+        if (isSavingsCat(c)) return; // saving past a goal isn't "over budget"
         if (c.budgeted > 0 && catSpent(p, c.id) > c.budgeted + 0.005) {
           const key = `${c.emoji}||${c.name}`;
           overCount[key] = (overCount[key] || 0) + 1;
@@ -2526,6 +2583,7 @@
     const catStats = {};
     closedHome.forEach((p) =>
       p.categories.forEach((c) => {
+        if (isSavingsCat(c)) return; // "Spending patterns" is about spending, not set-asides
         const key = `${c.emoji}||${c.name}`;
         const s = catStats[key] || (catStats[key] = { emoji: c.emoji, name: c.name, total: 0, count: 0, last: null });
         const cs = catSpent(p, c.id);
