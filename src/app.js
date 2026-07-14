@@ -81,6 +81,7 @@
   let adminPanelRefresh = null;// re-render hook while the admin panel is open
   // Spend-tab search/date filters — transient per-session (never persisted or synced).
   let _spendQuery = "", _spendFrom = "", _spendTo = "";
+  let _reportTab = "insights"; // Reports sub-view: "insights" | "history" (transient)
   let _heroAnimated = false; // count up the "left to spend" hero once per session
   // Data-safety banner: stays dismissed for 30 days once closed (persisted), so it doesn't nag.
   let bannerDismissed =
@@ -424,10 +425,22 @@
     const over = cats.filter((c) => catSpent(p, c.id) > c.budgeted + 0.005);
     if (over.length) {
       const names = over.map((c) => c.name).join(", ");
-      return {
-        tone: "over",
-        text: `🧭 You've slipped a little over on ${names}. No stress — ease up there or trim another category to balance it out.`,
-      };
+      // Going a little over now and then is part of a real, livable budget — keep
+      // the tone warm and forgiving (calm "ok" tone, never a red alarm).
+      const gentle = [
+        `🌊 A little over on ${names} — and that's completely okay. Spending on life now and then is part of a healthy budget.`,
+        `💛 You're a touch over on ${names}. No guilt here — one good week won't undo your progress.`,
+        `🍦 Over a bit on ${names}. Enjoy it — ease off a little and you'll balance out by payday.`,
+        `🌿 ${names} ran over slightly. Budgets are guides, not cages — you're still doing great.`,
+        `☕ Slightly over on ${names}. It happens to everyone — just glide the rest of the period.`,
+      ];
+      const reassuring = [
+        "🕊️ “Spending money is easy. Spending it well is a skill.” An occasional treat you truly value is money well spent. — The Art of Spending Money",
+        "🌅 The point of a budget was never to never spend — it's to spend on what matters, then move on with a clear conscience. — The Art of Spending Money",
+        "💛 “Money's real job is to improve how you feel about your days.” Sometimes that means spending a little more. — The Art of Spending Money",
+        "🎈 “Happiness is results minus expectations.” Enjoy what you bought, adjust gently, and carry on. — The Psychology of Money",
+      ];
+      return { tone: "ok", text: Math.random() < 0.5 ? rotateLine(gentle) : rotateLine(reassuring) };
     }
 
     // Timing for burn-rate projections (how far through the period are we?).
@@ -470,9 +483,9 @@
         text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
       };
     }
-    // On track — mix warm encouragement with wisdom from The Psychology of Money
-    // and The Art of Spending Money (both by Morgan Housel).
-    const lines = [
+    // On track — warm encouragements plus book wisdom. Quotes are shown most of
+    // the time (see the weighted pick below); warm lines are the lighter garnish.
+    const warmLines = [
       // Warm, on-track encouragements
       "💙 You're right on track — lovely work. Keep it up!",
       "🌊 Looking good — plenty of comfortable room left this period.",
@@ -492,6 +505,8 @@
       "🪷 Unbothered budget, moisturized savings. Thriving.",
       "🔥 You're on a roll — same energy for the rest of the period.",
       "🍀 Right where you want to be. Keep the momentum going.",
+    ];
+    const quoteLines = [
       // General money wisdom
       "🌱 A budget isn't about spending less — it's about spending on what matters. You're doing that.",
       "💡 Small, boring, consistent choices are what quietly build wealth. Keep going.",
@@ -546,25 +561,45 @@
       "🚪 Independence is the best thing money can buy, and you buy it a little at a time. — The Art of Spending Money",
       "🍽️ The best money you spend often buys time, calm, or people you love — not stuff. — The Art of Spending Money",
       "🎈 Enough isn't a number; it's a feeling of not needing more to feel okay. You're near it. — The Art of Spending Money",
+      // Inspirational saving quotes
+      "🌳 “Do not save what is left after spending, but spend what is left after saving.” You're saving first. — Warren Buffett",
+      "🌲 “Someone's sitting in the shade today because someone planted a tree a long time ago.” Keep planting. — Warren Buffett",
+      "🪙 “A penny saved is a penny earned.” Every one you kept this period counts. — Benjamin Franklin",
+      "🚢 “Beware of little expenses; a small leak will sink a great ship.” You're patching the leaks. — Benjamin Franklin",
+      "📚 “The habit of saving is itself an education.” You're getting an education this period. — T.T. Munger",
+      "🧾 “It's not your salary that makes you rich, it's your spending habits.” Yours are working. — Charles A. Jaffe",
+      "🐷 Pay yourself first — and you did. Savings before spending is the whole game.",
+      "🌊 Save a little, often. Consistency quietly beats intensity every time.",
+      "🧱 Wealth is built one saved dollar at a time. You laid a few more bricks today.",
+      "🌱 “The individual who saves is a public benefactor.” Small savings, big future. — Andrew Carnegie",
+      "💧 Tiny savings add up like drops filling a bucket — and yours is filling.",
+      "🕯️ Money saved quietly today is freedom you'll feel loudly later.",
+      "🌾 Every dollar you don't spend is a seed. You've planted a good handful this period.",
+      "⛰️ Slow and steady saving moves mountains — you're chipping away nicely.",
+      "🔑 Saving isn't sacrifice; it's buying your future self more choices. Well done.",
+      "🌟 “Money is a terrible master but an excellent servant.” Yours is working for you. — P.T. Barnum",
+      "🏦 Future-you just quietly got a little richer. Thank present-you.",
+      "☀️ A calm, consistent saver always outlasts a flashy spender. That's you.",
     ];
-    // Celebrate any savings/goal category she's fully funded this period.
+    // Celebrate any savings/goal category fully funded this period.
     const funded = p.categories.filter(
       (c) => c.budgeted > 0 && isSavingsCat(c) && catSpent(p, c.id) >= c.budgeted - 0.005
     );
     if (funded.length) {
-      lines.unshift(
+      quoteLines.unshift(
         `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
       );
     }
-    // Every so often, surface a data-aware projection instead of a quote so the
-    // coach feels like it's actually watching the numbers.
+    // Only occasionally interrupt with a data projection — the book quotes are
+    // the star, so keep this rare.
     if (dl > 0 && elapsed >= 3 && timeFrac > 0) {
       const projSaved = periodIncome(p) - totalSpent(p) / timeFrac;
-      if (projSaved > 0.005 && Math.random() < 0.5) {
+      if (projSaved > 0.005 && Math.random() < 0.18) {
         return { tone: "ok", text: `📊 At your current pace, you're on track to save about ${fmt(projSaved)} this period — keep it up!` };
       }
     }
-    return { tone: "ok", text: rotateLine(lines) };
+    // Show a book/wisdom quote most of the time; a warm one-liner now and then.
+    return { tone: "ok", text: Math.random() < 0.8 ? rotateLine(quoteLines) : rotateLine(warmLines) };
   }
 
   const freqLabel = (f) =>
@@ -2695,7 +2730,26 @@
       </div>`
       : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`;
 
-    main.innerHTML = goalsCard + analyticsCards + historyCard + exportCard;
+    // Split the long Reports scroll into a segmented Insights / History view.
+    // Goals stay pinned at the top; Export & share stays pinned at the bottom.
+    const segTab = _reportTab === "history" ? "history" : "insights";
+    const seg = hasHistory
+      ? `<div class="chips report-seg" id="report-seg" role="group" aria-label="Report view">
+           <button type="button" class="chip ${segTab === "insights" ? "active" : ""}" data-rtab="insights">📈 Insights</button>
+           <button type="button" class="chip ${segTab === "history" ? "active" : ""}" data-rtab="history">🗂️ History</button>
+         </div>`
+      : "";
+    const middle = hasHistory ? (segTab === "insights" ? analyticsCards : historyCard) : historyCard;
+    main.innerHTML = goalsCard + seg + middle + exportCard;
+
+    const segEl = document.getElementById("report-seg");
+    if (segEl)
+      segEl.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-rtab]");
+        if (!b) return;
+        _reportTab = b.dataset.rtab;
+        render();
+      });
 
     document.getElementById("rp-period").addEventListener("change", (e) => { state._reportId = e.target.value; render(); });
     const rpShare = document.getElementById("rp-share");

@@ -151,23 +151,7 @@
    }
    // Actual money saved in a period = income minus everything spent.
    const periodSaved = (p) => periodIncome(p) - totalSpent(p);
-@@ -470,12 +482,12 @@
-         text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
-       };
-     }
--    // On track — mix warm encouragement with wisdom from The Psychology of Money
-+    // On track — mix encouragement with wisdom from The Psychology of Money
-     // and The Art of Spending Money (both by Morgan Housel).
-     const lines = [
-       // Warm, on-track encouragements
--      "💙 You're right on track — lovely work. Keep it up!",
--      "🌊 Looking good — plenty of comfortable room left this period.",
-+      "💚 Right on track — nice work. Keep it rolling!",
-+      "📈 Looking good — plenty of comfortable room left this period.",
-       "🎯 Bang on budget. This is exactly what winning looks like.",
-       "🍃 Calm and steady — your budget's breathing easy this period.",
-       "⛵ Smooth sailing. You're gliding through this one with room to spare.",
-@@ -1232,7 +1244,6 @@
+@@ -1266,7 +1278,6 @@
          closed: false,
          createdAt: new Date().toISOString(),
        };
@@ -175,7 +159,7 @@
        cats.forEach((c) => {
          if (c.fixed && c.budgeted > 0) {
            period.transactions.push({
-@@ -1608,7 +1619,7 @@
+@@ -1642,7 +1653,7 @@
      document.getElementById("ev-go").addEventListener("click", () => {
        p.closed = true;
        p.closedAt = new Date().toISOString();
@@ -184,7 +168,7 @@
        save();
        close();
        render();
-@@ -2426,7 +2437,7 @@
+@@ -2460,7 +2471,7 @@
      const plural = cats.length > 1;
      const subject = `⚠️ Over budget: ${cats.map((c) => c.name).join(", ")}`;
      const body =
@@ -193,7 +177,7 @@
        cats
          .map((c) => {
            const cs = catSpent(p, c.id);
-@@ -2443,7 +2454,7 @@
+@@ -2477,7 +2488,7 @@
            <h2 style="text-align:center;">Over budget</h2>
            <p class="sub" style="text-align:center;">Heads up — this spending puts ${plural ? "these categories" : "this category"} over budget.</p>
            <ul class="ob-list">${detail}</ul>
@@ -202,7 +186,7 @@
            <p class="footer-note" style="margin:8px 0 14px;">Opens a pre-filled message to ${esc(REPORT_EMAILS.join(" and "))}.</p>
            <button class="btn btn-ghost btn-block" id="ob-dismiss">Dismiss</button>
          </div>
-@@ -3229,11 +3240,12 @@
+@@ -3263,11 +3274,12 @@
    }
  
    // Render the user's own monthly results from local data, scoped to one
@@ -218,7 +202,7 @@
      if (!mine.months.length) {
        main.innerHTML = `<div class="card"><h2>${isVac ? "Vacation results" : "Your results"}</h2><p class="sub">${isVac ? "Once you log spending on a vacation budget, each trip's totals show up here." : "Once you finish a pay period, each month's income, spending, and savings show up here."}</p></div>`;
        return;
-@@ -3467,6 +3479,14 @@
+@@ -3501,6 +3513,14 @@
           <button class="btn btn-primary btn-block" id="set-admin">🛠️ Open admin panel</button>
           <p class="footer-note" style="margin:6px 0 0;">Manage users, view accounts, broadcast a message, and toggle features.</p>`
        : "";
@@ -233,7 +217,7 @@
      const { close } = mountModal(`
        <div class="modal-overlay">
          <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
-@@ -3477,6 +3497,8 @@
+@@ -3511,6 +3531,8 @@
  
            ${adminBlock}
  
@@ -242,7 +226,7 @@
            ${flagOn("vacationMode", true) ? `<div class="section-label set-sec">Preferences</div>
            <div class="vac-row">
              <div class="vac-copy">
-@@ -3527,6 +3549,15 @@
+@@ -3561,6 +3583,15 @@
          openAdminPanel();
        });
  
@@ -258,7 +242,7 @@
      const vacToggle = document.getElementById("set-vacation");
      if (vacToggle)
        vacToggle.addEventListener("change", () => {
-@@ -3884,92 +3915,125 @@
+@@ -3918,92 +3949,125 @@
    }
  
    function startSync() {

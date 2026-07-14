@@ -907,3 +907,7 @@ textarea:focus-visible,
   .safety-banner { background: #2e2410; border-color: #4a3a16; color: #f0cf95; }
   .safety-x { color: #f0cf95; }
 }
+
+/* Reports segmented Insights/History control */
+.report-seg { margin-bottom: 12px; }
+.report-seg .chip { flex: 1; text-align: center; }
