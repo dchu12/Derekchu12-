@@ -1,6 +1,6 @@
 # Yosan — Roadmap & saved plans
 
-_Last updated: 2026-07-14. Live version at time of writing: **v125**._
+_Last updated: 2026-07-18. Live version at time of writing: **v128**._
 
 Three deployments, kept in sync on every change (now generated from one
 source — edit `src/app.js`, run `npm run build`; see the README):
@@ -21,6 +21,8 @@ source — edit `src/app.js`, run `npm run build`; see the README):
 6. **Admin "reset / delete a user's data"** — currently the admin can Pause/Enable (revoke access) only; a guarded destructive reset was intentionally left out. Add if wanted.
 7. **Reports IA — round three (optional)** — v122 added segmented Insights/History; v123 made saved-per-period a diverging zero-baseline chart + merged the total-saved card. Could still: collapsible cards, or a diverging save-rate chart too.
 8. **Single-source the styles too (optional)** — `styles.css`/`index.html`/`manifest.json` are still per-deployment (theme colors, tab set). Could tokenize the accent color + firebase/tab differences into the build like `app.js`.
+
+_Shipped since (v126–v128): Light/Dark/Auto theme toggle in Settings; optional app lock (PIN + biometric/WebAuthn, auto-relock, device-local); Home-screen "Quick add" shortcut + share-target (`?action=add` / shared text jumps straight into logging spend)._
 
 _Shipped so far (v116–v123): quick-add thousands-comma fix; Guest/Member/Admin roles + admin panel; test harness + CI; single-source build; CSV export; Reports save-rate trend; Spend search + date range; first-run onboarding; tightened Firestore rules; update-available toast; accessibility pass; savings-shown-as-positive; dark mode; ~40 more coach book quotes (more frequent, gentler on overspending); over-allocated hint; segmented Reports; savings-counts-as-saved; diverging saved-per-period chart; payday/budget reminders (local, opt-in); household linking core slice._
 
