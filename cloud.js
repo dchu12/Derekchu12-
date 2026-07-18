@@ -160,6 +160,69 @@
       if (!ready) return Promise.reject(new Error("offline"));
       return db.collection("app").doc("config").set(payload, { merge: true });
     },
+
+    // Optional sign-UP (create account) — unlocks household linking for new users.
+    signUp: function (email, password) {
+      if (!ready) return Promise.reject(new Error("Sign-up isn't available right now."));
+      return auth.createUserWithEmailAndPassword(String(email).trim(), password);
+    },
+
+    /* ---- Household linking (two-person couple; summaries only) -------- */
+    createHousehold: function (hid, payload) {
+      if (!ready) return Promise.reject(new Error("offline"));
+      return db.collection("households").doc(hid).set(payload);
+    },
+    getHousehold: function (hid) {
+      if (!ready) return Promise.resolve(null);
+      return db.collection("households").doc(hid).get()
+        .then(function (s) { return s.exists ? Object.assign({ id: s.id }, s.data()) : null; })
+        .catch(function () { return null; });
+    },
+    watchHousehold: function (hid, cb) {
+      if (!ready || !hid) return function () {};
+      return db.collection("households").doc(hid).onSnapshot(
+        function (s) { cb(s.exists ? Object.assign({ id: s.id }, s.data()) : null); },
+        function () {}
+      );
+    },
+    saveInvite: function (code, householdId) {
+      if (!ready) return Promise.reject(new Error("offline"));
+      return db.collection("inviteCodes").doc(code).set({ householdId: householdId });
+    },
+    resolveInvite: function (code) {
+      if (!ready) return Promise.resolve(null);
+      return db.collection("inviteCodes").doc(String(code).trim().toUpperCase()).get()
+        .then(function (s) { return s.exists ? s.data().householdId : null; })
+        .catch(function () { return null; });
+    },
+    // Add yourself as the 2nd member (rules cap the household at 2).
+    joinHousehold: function (hid, uid) {
+      if (!ready) return Promise.reject(new Error("offline"));
+      return db.collection("households").doc(hid).update({
+        members: firebase.firestore.FieldValue.arrayUnion(uid),
+      });
+    },
+    leaveHousehold: function (hid, uid) {
+      if (!ready) return Promise.reject(new Error("offline"));
+      return db.collection("households").doc(hid).update({
+        members: firebase.firestore.FieldValue.arrayRemove(uid),
+      });
+    },
+    saveSummary: function (hid, uid, payload) {
+      if (!ready) return Promise.resolve();
+      return db.collection("households").doc(hid).collection("summaries").doc(uid).set(payload).catch(function () {});
+    },
+    watchSummaries: function (hid, cb) {
+      if (!ready || !hid) return function () {};
+      return db.collection("households").doc(hid).collection("summaries").onSnapshot(
+        function (snap) {
+          var out = [];
+          snap.forEach(function (d) { out.push(Object.assign({ uid: d.id }, d.data())); });
+          cb(out);
+        },
+        function () { cb([]); }
+      );
+    },
   };
 
   window.Cloud = Cloud;

@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "124";
+  const APP_VERSION = "125";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -79,6 +79,13 @@
   let selfUserUnsub = null;    // watch our own users/{uid} doc (honor admin disable)
   let accountDisabled = false; // set true if an admin disables this account
   let adminPanelRefresh = null;// re-render hook while the admin panel is open
+  // Household linking (two-person couple; summaries only).
+  let householdId = null;         // current household id (from the user profile)
+  let household = null;           // latest household doc
+  let householdSummaries = [];    // [{uid, name, left, spent, saved, updatedAt}]
+  let householdUnsub = null, summariesUnsub = null, summaryPushTimer = null;
+  let householdRefresh = null;    // repaint hook while the household modal is open
+  let pendingJoinCode = null;     // ?join=CODE captured from the URL
   // Spend-tab search/date filters — transient per-session (never persisted or synced).
   let _spendQuery = "", _spendFrom = "", _spendTo = "";
   let _reportTab = "insights"; // Reports sub-view: "insights" | "history" (transient)
@@ -851,6 +858,7 @@
 
   function render() {
     if (accountDisabled) return renderDisabled();
+    if (householdId) publishSummarySoon(); // keep our shared summary current
     setCur(HOME_CUR); // default; period views set their own currency below
     // "History" and "Report" are now one combined "Reports" tab.
     if (state.view === "history") state.view = "report";
@@ -3567,6 +3575,10 @@
             </label>
           </div>` : ""}
 
+          ${cloudOn() && cloudUser ? `
+          <div class="section-label set-sec">Household</div>
+          <button class="btn btn-ghost btn-block" id="set-household">👫 ${householdId ? "Household — you + your partner" : "Link budgets with your partner"}</button>` : ""}
+
           <div class="section-label set-sec">Your data</div>
           <div class="field-row">
             <button class="btn btn-primary" id="set-export" style="flex:1;">⬇️ Download</button>
@@ -3627,6 +3639,9 @@
           showToast("Reminders off");
         }
       });
+
+    const householdBtn = document.getElementById("set-household");
+    if (householdBtn) householdBtn.addEventListener("click", () => { close(); openHouseholdModal(); });
 
     document.getElementById("set-export").addEventListener("click", exportData);
     document.getElementById("set-export-csv").addEventListener("click", exportAllCSV);
@@ -3840,6 +3855,141 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Household linking — pair with a partner for a combined summary. Summaries
+   * only (name + left/spent/saved); categories/transactions never leave here.
+   * ------------------------------------------------------------------ */
+  const INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I/L
+  function genInviteCode() {
+    let s = "";
+    for (let i = 0; i < 6; i++) s += INVITE_ALPHABET[Math.floor(Math.random() * INVITE_ALPHABET.length)];
+    return s;
+  }
+  function parseJoinCode() {
+    try {
+      const c = new URL(location.href).searchParams.get("join");
+      return c ? String(c).trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) : null;
+    } catch (e) { return null; }
+  }
+  function mySummary() {
+    const p = activePayday();
+    const budgeted = p ? totalBudgeted(p) : 0;
+    const spent = p ? totalSpent(p) : 0;
+    return { name: PERSON_NAME, left: budgeted - spent, spent: spent, saved: p ? periodSaved(p) : 0, updatedAt: Date.now() };
+  }
+  function publishSummarySoon() {
+    if (!householdId || !cloudUser) return;
+    clearTimeout(summaryPushTimer);
+    summaryPushTimer = setTimeout(() => { try { Cloud.saveSummary(householdId, cloudUser.uid, mySummary()); } catch (e) {} }, 700);
+  }
+  function stopHousehold() {
+    if (householdUnsub) { householdUnsub(); householdUnsub = null; }
+    if (summariesUnsub) { summariesUnsub(); summariesUnsub = null; }
+    household = null;
+    householdSummaries = [];
+  }
+  function startHousehold(hid) {
+    if ((hid || null) === householdId && (householdUnsub || !hid)) return;
+    stopHousehold();
+    householdId = hid || null;
+    if (!householdId || !cloudOn()) { if (householdRefresh) householdRefresh(); return; }
+    householdUnsub = Cloud.watchHousehold(householdId, (h) => {
+      household = h;
+      if (!h) { householdId = null; stopHousehold(); }
+      if (householdRefresh) householdRefresh();
+      publishSummarySoon();
+    });
+    summariesUnsub = Cloud.watchSummaries(householdId, (list) => {
+      householdSummaries = list || [];
+      if (householdRefresh) householdRefresh();
+    });
+    publishSummarySoon();
+  }
+
+  async function createHousehold() {
+    if (!cloudUser) return;
+    const hid = "h" + uid();
+    const code = genInviteCode();
+    try {
+      await Cloud.createHousehold(hid, { adminUid: cloudUser.uid, name: (PERSON_NAME || "Our") + "'s household", inviteCode: code, members: [cloudUser.uid], createdAt: Date.now() });
+      await Cloud.saveInvite(code, hid);
+      await Cloud.saveUser(cloudUser.uid, { householdId: hid });
+      startHousehold(hid);
+      showToast("Household created — share your code 👫");
+    } catch (e) { showToast("Couldn't create a household — check connection/rules."); }
+  }
+  async function joinHouseholdByCode(code) {
+    if (!cloudUser || !code) return;
+    try {
+      const hid = await Cloud.resolveInvite(code);
+      if (!hid) { showToast("That code didn't match a household."); return; }
+      await Cloud.joinHousehold(hid, cloudUser.uid);
+      await Cloud.saveUser(cloudUser.uid, { householdId: hid });
+      pendingJoinCode = null;
+      startHousehold(hid);
+      showToast("Joined 👫");
+    } catch (e) { showToast("Couldn't join — it may be full, or the code is wrong."); }
+  }
+  async function leaveHouseholdNow() {
+    if (!cloudUser || !householdId) return;
+    const hid = householdId;
+    try {
+      await Cloud.leaveHousehold(hid, cloudUser.uid);
+      await Cloud.saveUser(cloudUser.uid, { householdId: null });
+      startHousehold(null);
+      showToast("Left the household.");
+    } catch (e) { showToast("Couldn't leave — check connection."); }
+  }
+
+  function householdHTML() {
+    if (!cloudOn()) return `<h2>👫 Household</h2><p class="sub">Cloud sync isn't available here, so partner linking is off.</p>`;
+    if (!cloudUser) return `<h2>👫 Household</h2><p class="sub">Sign in to link budgets with your partner and see a combined view.</p><button class="btn btn-primary btn-block" id="hh-signin">Sign in</button>`;
+    if (!householdId || !household) {
+      return `<h2>👫 Household</h2>
+        <p class="sub">Pair with your partner for a combined "left to spend" — <b>summaries only</b>, never your categories or transactions.</p>
+        <button class="btn btn-primary btn-block" id="hh-create">Create a household</button>
+        <div class="section-label set-sec">Have a code?</div>
+        <div class="field"><input id="hh-code" placeholder="6-character code" maxlength="6" autocapitalize="characters" value="${esc(pendingJoinCode || "")}" style="text-transform:uppercase;letter-spacing:2px;" /></div>
+        <button class="btn btn-ghost btn-block" id="hh-join">Join with code</button>`;
+    }
+    const me = cloudUser.uid;
+    const totals = householdSummaries.reduce((a, s) => ({ left: a.left + Number(s.left || 0), spent: a.spent + Number(s.spent || 0), saved: a.saved + Number(s.saved || 0) }), { left: 0, spent: 0, saved: 0 });
+    const people = householdSummaries
+      .map((s) => `<div class="hh-person"><div class="hh-name">${esc(s.name || "Partner")}${s.uid === me ? ' <span class="hh-you">you</span>' : ""}</div><div class="hh-nums">${fmt(s.left)} left · ${fmt(s.spent)} spent · ${fmt(s.saved)} saved</div></div>`)
+      .join("");
+    const full = (household.members || []).length >= 2;
+    return `<h2>👫 ${esc(household.name || "Household")}</h2>
+      <div class="card hh-together"><div class="hh-t-label">Together, left to spend</div><div class="hh-t-amount">${fmt(totals.left)}</div><div class="hh-t-sub">${fmt(totals.saved)} saved · ${fmt(totals.spent)} spent this period</div></div>
+      ${people || '<p class="sub">Waiting for summaries…</p>'}
+      ${!full ? `<div class="section-label set-sec">Invite your partner</div><p class="sub">Share this code (or the link) — they enter it under Household.</p><div class="hh-code-box">${esc(household.inviteCode || "")}</div><button class="btn btn-ghost btn-block btn-sm" id="hh-share">Share invite link</button>` : ""}
+      <button class="btn btn-danger btn-block btn-sm" id="hh-leave" style="margin-top:16px;">Leave household</button>`;
+  }
+  function wireHousehold(root) {
+    const on = (id, fn) => { const el = root.querySelector("#" + id); if (el) el.addEventListener("click", fn); };
+    on("hh-signin", () => openLogin(false));
+    on("hh-create", createHousehold);
+    on("hh-join", () => { const v = ((root.querySelector("#hh-code") || {}).value || "").trim().toUpperCase(); joinHouseholdByCode(v); });
+    on("hh-leave", () => { if (confirm("Leave this household? You can rejoin later with the code.")) leaveHouseholdNow(); });
+    on("hh-share", () => {
+      const url = location.origin + location.pathname + "?join=" + encodeURIComponent(household.inviteCode || "");
+      const text = `Join my Yosan household — code ${household.inviteCode}`;
+      if (navigator.share) navigator.share({ title: "Yosan household", text: text, url: url }).catch(() => {});
+      else { try { navigator.clipboard.writeText(url); } catch (e) {} showToast("Invite link copied"); }
+    });
+  }
+  function openHouseholdModal() {
+    const { close } = mountModal(`<div class="modal-overlay"><div class="modal" role="dialog" aria-modal="true" aria-label="Household"><div id="hh-body"></div><button class="btn btn-ghost btn-block" id="hh-close" style="margin-top:16px;">Close</button></div></div>`);
+    document.getElementById("hh-close").addEventListener("click", () => { householdRefresh = null; close(); });
+    const paint = () => {
+      const body = document.getElementById("hh-body");
+      if (!body || !document.body.contains(body)) { householdRefresh = null; return; }
+      body.innerHTML = householdHTML();
+      wireHousehold(body);
+    };
+    householdRefresh = paint;
+    paint();
+  }
+
+  /* ------------------------------------------------------------------ *
    * Cloud sync (Firebase) — optional; app works fully without it.
    * ------------------------------------------------------------------ */
   const cloudOn = () => !!(window.Cloud && Cloud.available);
@@ -3886,6 +4036,9 @@
     selfUserUnsub = Cloud.watchUser(cloudUser.uid, (doc) => {
       const now = !!(doc && doc.disabled);
       if (now !== accountDisabled) { accountDisabled = now; render(); }
+      // Household linking: the profile points at the current household (or null).
+      const hid = (doc && doc.householdId) || null;
+      if (hid !== householdId) startHousehold(hid);
     });
   }
 
@@ -4225,7 +4378,7 @@
       window.__yosanTest = {
         parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
         mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
-        transactionsCSV, saveRateSeries, periodConsumed, periodSaved, remindersFor, reminderSchedule,
+        transactionsCSV, saveRateSeries, periodConsumed, periodSaved, remindersFor, reminderSchedule, genInviteCode,
         setState: (s) => { state = s; },
         getState: () => state,
       };
@@ -4384,9 +4537,12 @@
   }
 
   /* Boot */
+  pendingJoinCode = parseJoinCode();
   render();
   initCloud();
   maybeShowOnboarding();
   initSWUpdates();
   initReminders();
+  // A friend shared a ?join=CODE link: nudge them to the Household screen.
+  if (pendingJoinCode) setTimeout(() => showToast("You've been invited to a household — open Settings › Household.", "Open", () => (cloudUser ? openHouseholdModal() : openLogin(false))), 1200);
 })();

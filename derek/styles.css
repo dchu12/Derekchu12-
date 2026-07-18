@@ -934,3 +934,14 @@ textarea:focus-visible,
 .dv-key { font-weight: 700; }
 .dv-key.pos { color: var(--good); }
 .dv-key.neg { color: var(--danger); }
+
+/* ---- Household (together view) ----------------------------------------- */
+.hh-together { text-align: center; padding: 18px 16px; margin: 8px 0 12px; }
+.hh-t-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); font-weight: 700; }
+.hh-t-amount { font-size: 30px; font-weight: 800; color: var(--accent); margin: 4px 0; }
+.hh-t-sub { font-size: 12.5px; color: var(--text-dim); }
+.hh-person { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.hh-name { font-weight: 700; }
+.hh-you { font-size: 10px; font-weight: 800; text-transform: uppercase; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
+.hh-nums { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
+.hh-code-box { font-size: 26px; font-weight: 800; letter-spacing: 6px; text-align: center; background: var(--surface-2); border-radius: 12px; padding: 12px; margin: 8px 0; color: var(--text); }
