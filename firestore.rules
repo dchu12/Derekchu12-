@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// Yosan — Firestore security rules.
+//
+// Roles:
+//   guest  — not signed in (never reaches Firestore; the app runs local-only).
+//   user   — any signed-in account. Syncs their budget + monthly results.
+//   admin  — the single account below. Reads every account, manages users,
+//            and writes app-wide config (feature flags + broadcast).
+//
+// Deploy this in the Firebase console (Firestore Database → Rules → paste →
+// Publish) or with `firebase deploy --only firestore:rules`. See docs/ADMIN.md.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // Admin is identified by email, which email/password tokens always carry —
+    // so no custom claims are required.
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == 'derekchu12@gmail.com';
+    }
+
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // The current household is two people: Derek (admin) + Kelly. Kelly is
+    // identified by email; both casings are allowed in case her account stored a
+    // capitalized local part. `isCore()` is the pair that shares budgets/results.
+    // When Household (#4) lands, replace this with real membership lookups.
+    function isKelly() {
+      return signedIn() && (
+        request.auth.token.email == 'Kellyseadreams@gmail.com' ||
+        request.auth.token.email == 'kellyseadreams@gmail.com'
+      );
+    }
+    function isCore() { return isAdmin() || isKelly(); }
+
+    // Budgets. Legacy fixed keys are locked to the people who actually use them,
+    // so a future signed-up stranger can't read them:
+    //   budgets/kelly — Kelly + Derek (Derek's app mirrors Kelly's budget)
+    //   budgets/derek — Derek only (admin)
+    // Any other key is treated as a per-user budget owned by that uid, ready for
+    // public sign-up without another rules change.
+    match /budgets/kelly { allow read, write: if isCore(); }
+    match /budgets/derek { allow read, write: if isAdmin(); }
+    match /budgets/{uid} { allow read, write: if isAdmin() || isOwner(uid); }
+
+    // Monthly results summaries powering the shared Results view. The two
+    // partners see each other's summaries; strangers see neither. Per-uid result
+    // docs (future sign-ups) are owner-only + admin.
+    match /results/kelly { allow read, write: if isCore(); }
+    match /results/derek { allow read, write: if isCore(); }
+    match /results/{uid} { allow read, write: if isAdmin() || isOwner(uid); }
+
+    // User directory. A user may create/update ONLY their own profile and may
+    // not grant themselves admin or un-pause themselves — those fields are
+    // admin-only. The admin can read, write, and delete any account.
+    match /users/{uid} {
+      allow read:   if isAdmin() || isOwner(uid);
+      allow create: if isAdmin() ||
+        (isOwner(uid)
+         && !request.resource.data.keys().hasAny(['disabled'])
+         && request.resource.data.get('role', 'user') != 'admin');
+      allow update: if isAdmin() ||
+        (isOwner(uid)
+         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['disabled'])
+         && request.resource.data.get('role', 'user') != 'admin');
+      allow delete: if isAdmin();
+    }
+
+    // App config: feature flags + broadcast banner. World-readable so a broadcast
+    // reaches even signed-out visitors; only the admin can change it.
+    match /app/{doc} {
+      allow read:  if true;
+      allow write: if isAdmin();
+    }
+  }
+}

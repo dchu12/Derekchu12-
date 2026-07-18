@@ -10,13 +10,17 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "115";
+  const APP_VERSION = "123";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
   const BUDGET_KEY = "kelly";
   const PERSON_NAME = "Kelly";  // whose budget this app publishes
   const PARTNER_NAME = "Derek"; // the other person shown in shared Results
+
+  // The one account with admin powers (user directory, app controls). Roles are
+  // enforced server-side by Firestore rules; the client only reveals admin UI.
+  const ADMIN_EMAIL = "derekchu12@gmail.com";
 
   /* ------------------------------------------------------------------ *
    * State
@@ -66,6 +70,19 @@
   let resultsUnsub = [];  // realtime results listeners (both people)
   const resultsCache = { kelly: null, derek: null }; // latest results docs
   let resultsSeeded = false; // publish our results summary once after first sync
+  // Roles + app config (feature flags / broadcast). All optional; the app is
+  // fully usable signed out or when Firebase isn't available.
+  let appConfig = null;        // latest app/config doc, or null
+  let configUnsub = null;      // app/config listener unsubscribe
+  let usersCache = [];         // admin: directory of all signed-in accounts
+  let usersUnsub = null;       // admin: users collection listener
+  let selfUserUnsub = null;    // watch our own users/{uid} doc (honor admin disable)
+  let accountDisabled = false; // set true if an admin disables this account
+  let adminPanelRefresh = null;// re-render hook while the admin panel is open
+  // Spend-tab search/date filters — transient per-session (never persisted or synced).
+  let _spendQuery = "", _spendFrom = "", _spendTo = "";
+  let _reportTab = "insights"; // Reports sub-view: "insights" | "history" (transient)
+  let _heroAnimated = false; // count up the "left to spend" hero once per session
   // Data-safety banner: stays dismissed for 30 days once closed (persisted), so it doesn't nag.
   let bannerDismissed =
     Date.now() - Number(localStorage.getItem(STORAGE_KEY + "-banner-dismissed") || 0) < 30 * 86400000;
@@ -313,7 +330,7 @@
       const m = months[mk] || (months[mk] = { income: 0, budgeted: 0, spent: 0, cats: {} });
       m.income += periodIncome(p);
       m.budgeted += totalBudgeted(p);
-      m.spent += totalSpent(p);
+      m.spent += periodConsumed(p); // "spent" here excludes savings so income = spent + saved
       p.categories.forEach((c) => {
         const cc = m.cats[c.name] || (m.cats[c.name] = { emoji: c.emoji || "", budgeted: 0, spent: 0 });
         cc.budgeted += Number(c.budgeted || 0);
@@ -341,11 +358,27 @@
       });
     return { name: PERSON_NAME, updatedAt: Date.now(), months: list };
   }
-  // Actual money saved in a period = income minus everything spent.
-  const periodSaved = (p) => periodIncome(p) - totalSpent(p);
+  // Money actually consumed this period = spending that ISN'T a transfer into a
+  // savings/goal category (funding savings is keeping money, not spending it).
+  const periodConsumed = (p) => {
+    const sav = new Set((p.categories || []).filter(isSavingsCat).map((c) => c.id));
+    return p.transactions.reduce((s, t) => s + (sav.has(t.categoryId) ? 0 : Number(t.amount)), 0);
+  };
+  // Money saved in a period = income minus what was consumed. So money moved into
+  // a savings category counts as saved, not spent — matching the dashboard.
+  const periodSaved = (p) => periodIncome(p) - periodConsumed(p);
   // Cumulative savings across all closed (finished) periods.
   const totalSavedToDate = () =>
     state.periods.filter((p) => p.closed).reduce((s, p) => s + periodSaved(p), 0);
+
+  // Save rate (share of income kept) per period — for the Reports trend. Pure/testable.
+  function saveRateSeries(periods) {
+    return (periods || []).map((p) => {
+      const income = periodIncome(p);
+      const saved = periodSaved(p);
+      return { startDate: p.startDate, income, saved, rate: income > 0 ? saved / income : 0 };
+    });
+  }
 
   // A savings/goal category (e.g. "Savings", "Emergency fund") is money set aside
   // on purpose — funding it fully is a win, not overspending, so the coach never scolds it.
@@ -399,10 +432,22 @@
     const over = cats.filter((c) => catSpent(p, c.id) > c.budgeted + 0.005);
     if (over.length) {
       const names = over.map((c) => c.name).join(", ");
-      return {
-        tone: "over",
-        text: `🧭 You've slipped a little over on ${names}. No stress — ease up there or trim another category to balance it out.`,
-      };
+      // Going a little over now and then is part of a real, livable budget — keep
+      // the tone warm and forgiving (calm "ok" tone, never a red alarm).
+      const gentle = [
+        `🌊 A little over on ${names} — and that's completely okay. Spending on life now and then is part of a healthy budget.`,
+        `💛 You're a touch over on ${names}. No guilt here — one good week won't undo your progress.`,
+        `🍦 Over a bit on ${names}. Enjoy it — ease off a little and you'll balance out by payday.`,
+        `🌿 ${names} ran over slightly. Budgets are guides, not cages — you're still doing great.`,
+        `☕ Slightly over on ${names}. It happens to everyone — just glide the rest of the period.`,
+      ];
+      const reassuring = [
+        "🕊️ “Spending money is easy. Spending it well is a skill.” An occasional treat you truly value is money well spent. — The Art of Spending Money",
+        "🌅 The point of a budget was never to never spend — it's to spend on what matters, then move on with a clear conscience. — The Art of Spending Money",
+        "💛 “Money's real job is to improve how you feel about your days.” Sometimes that means spending a little more. — The Art of Spending Money",
+        "🎈 “Happiness is results minus expectations.” Enjoy what you bought, adjust gently, and carry on. — The Psychology of Money",
+      ];
+      return { tone: "ok", text: Math.random() < 0.5 ? rotateLine(gentle) : rotateLine(reassuring) };
     }
 
     // Timing for burn-rate projections (how far through the period are we?).
@@ -445,9 +490,9 @@
         text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
       };
     }
-    // On track — mix warm encouragement with wisdom from The Psychology of Money
-    // and The Art of Spending Money (both by Morgan Housel).
-    const lines = [
+    // On track — warm encouragements plus book wisdom. Quotes are shown most of
+    // the time (see the weighted pick below); warm lines are the lighter garnish.
+    const warmLines = [
       // Warm, on-track encouragements
       "💙 You're right on track — lovely work. Keep it up!",
       "🌊 Looking good — plenty of comfortable room left this period.",
@@ -467,6 +512,8 @@
       "🪷 Unbothered budget, moisturized savings. Thriving.",
       "🔥 You're on a roll — same energy for the rest of the period.",
       "🍀 Right where you want to be. Keep the momentum going.",
+    ];
+    const quoteLines = [
       // General money wisdom
       "🌱 A budget isn't about spending less — it's about spending on what matters. You're doing that.",
       "💡 Small, boring, consistent choices are what quietly build wealth. Keep going.",
@@ -497,25 +544,69 @@
       "🎁 The best purchases buy better days, not just nicer things. You're spending with intention. — The Art of Spending Money",
       "🍷 Spending well means matching money to what you actually value. You're aligned this period. — The Art of Spending Money",
       "🌅 Money's real job is to improve how you feel about your days. Looks like it's doing its job. — The Art of Spending Money",
+      // More from The Psychology of Money (Morgan Housel)
+      "🧠 “Doing well with money has a little to do with how smart you are and a lot to do with how you behave.” — The Psychology of Money",
+      "⏰ “Money's greatest intrinsic value is its ability to give you control over your time.” You're buying some back. — The Psychology of Money",
+      "🌅 “The highest form of wealth is the ability to wake up every morning and say, ‘I can do whatever I want today.’” — The Psychology of Money",
+      "🐷 “Save. Just save. You don't need a specific reason to save.” And you are. — The Psychology of Money",
+      "🌰 “The first rule of compounding is to never interrupt it unnecessarily.” Keep it running. — The Psychology of Money",
+      "😴 “Manage your money in a way that helps you sleep at night.” Restful math this period. — The Psychology of Money",
+      "🛡️ “There is no reason to risk what you have and need for what you don't have and don't need.” Steady wins. — The Psychology of Money",
+      "⚖️ “Being reasonable is more realistic, and you have a better chance of sticking with it for the long run.” — The Psychology of Money",
+      "🗺️ “Plan on your plan not going according to plan.” The room you've left is exactly that cushion. — The Psychology of Money",
+      "🤫 “Less ego, more wealth.” Quietly building — no need to flex. — The Psychology of Money",
+      "🌗 “Nothing is as good or as bad as it seems.” Calm consistency beats the swings. — The Psychology of Money",
+      "🙂 “Happiness is results minus expectations.” Spending on what you value keeps that gap kind. — The Psychology of Money",
+      "💵 “Wealth is the nice cars not purchased, the jewelry not bought.” The options you kept are the point. — The Psychology of Money",
+      "🧗 Getting money takes risk; keeping it takes humility and a little fear. You're keeping it. — The Psychology of Money",
+      "🏛️ Independence — doing what you want, when you want — is the dividend a savings habit pays. — The Psychology of Money",
+      // More from The Art of Spending Money (Morgan Housel)
+      "🧭 Money buys the most happiness when it buys control over your own time. — The Art of Spending Money",
+      "🎨 Spending well is less about the price and more about the fit with your life. You're fitting it. — The Art of Spending Money",
+      "🌱 The goal was never to spend as little as possible — it's to spend on what truly improves your days. — The Art of Spending Money",
+      "🕯️ Quiet, intentional spending beats loud, impressive spending every time. — The Art of Spending Money",
+      "🚪 Independence is the best thing money can buy, and you buy it a little at a time. — The Art of Spending Money",
+      "🍽️ The best money you spend often buys time, calm, or people you love — not stuff. — The Art of Spending Money",
+      "🎈 Enough isn't a number; it's a feeling of not needing more to feel okay. You're near it. — The Art of Spending Money",
+      // Inspirational saving quotes
+      "🌳 “Do not save what is left after spending, but spend what is left after saving.” You're saving first. — Warren Buffett",
+      "🌲 “Someone's sitting in the shade today because someone planted a tree a long time ago.” Keep planting. — Warren Buffett",
+      "🪙 “A penny saved is a penny earned.” Every one you kept this period counts. — Benjamin Franklin",
+      "🚢 “Beware of little expenses; a small leak will sink a great ship.” You're patching the leaks. — Benjamin Franklin",
+      "📚 “The habit of saving is itself an education.” You're getting an education this period. — T.T. Munger",
+      "🧾 “It's not your salary that makes you rich, it's your spending habits.” Yours are working. — Charles A. Jaffe",
+      "🐷 Pay yourself first — and you did. Savings before spending is the whole game.",
+      "🌊 Save a little, often. Consistency quietly beats intensity every time.",
+      "🧱 Wealth is built one saved dollar at a time. You laid a few more bricks today.",
+      "🌱 “The individual who saves is a public benefactor.” Small savings, big future. — Andrew Carnegie",
+      "💧 Tiny savings add up like drops filling a bucket — and yours is filling.",
+      "🕯️ Money saved quietly today is freedom you'll feel loudly later.",
+      "🌾 Every dollar you don't spend is a seed. You've planted a good handful this period.",
+      "⛰️ Slow and steady saving moves mountains — you're chipping away nicely.",
+      "🔑 Saving isn't sacrifice; it's buying your future self more choices. Well done.",
+      "🌟 “Money is a terrible master but an excellent servant.” Yours is working for you. — P.T. Barnum",
+      "🏦 Future-you just quietly got a little richer. Thank present-you.",
+      "☀️ A calm, consistent saver always outlasts a flashy spender. That's you.",
     ];
-    // Celebrate any savings/goal category she's fully funded this period.
+    // Celebrate any savings/goal category fully funded this period.
     const funded = p.categories.filter(
       (c) => c.budgeted > 0 && isSavingsCat(c) && catSpent(p, c.id) >= c.budgeted - 0.005
     );
     if (funded.length) {
-      lines.unshift(
+      quoteLines.unshift(
         `🎉 You've fully funded ${funded.map((c) => c.name).join(", ")} this period — future-you is grateful. Beautifully done!`
       );
     }
-    // Every so often, surface a data-aware projection instead of a quote so the
-    // coach feels like it's actually watching the numbers.
+    // Only occasionally interrupt with a data projection — the book quotes are
+    // the star, so keep this rare.
     if (dl > 0 && elapsed >= 3 && timeFrac > 0) {
-      const projSaved = periodIncome(p) - totalSpent(p) / timeFrac;
-      if (projSaved > 0.005 && Math.random() < 0.5) {
+      const projSaved = periodIncome(p) - periodConsumed(p) / timeFrac;
+      if (projSaved > 0.005 && Math.random() < 0.18) {
         return { tone: "ok", text: `📊 At your current pace, you're on track to save about ${fmt(projSaved)} this period — keep it up!` };
       }
     }
-    return { tone: "ok", text: rotateLine(lines) };
+    // Show a book/wisdom quote most of the time; a warm one-liner now and then.
+    return { tone: "ok", text: Math.random() < 0.8 ? rotateLine(quoteLines) : rotateLine(warmLines) };
   }
 
   const freqLabel = (f) =>
@@ -713,9 +804,10 @@
     return { close, modal };
   }
 
-  /* Lightweight toast with an optional action (used for Undo). */
+  /* Lightweight toast with an optional action (used for Undo).
+   * opts.sticky keeps it up until acted on/replaced (used for update prompts). */
   let _toastTimer = null;
-  function showToast(message, actionLabel, actionFn) {
+  function showToast(message, actionLabel, actionFn, opts) {
     let host = document.getElementById("toast-host");
     if (!host) {
       host = document.createElement("div");
@@ -729,7 +821,7 @@
       </div>`;
     const clear = () => { host.innerHTML = ""; };
     if (_toastTimer) clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(clear, 5000);
+    _toastTimer = opts && opts.sticky ? null : setTimeout(clear, 5000);
     if (actionLabel && actionFn) {
       host.querySelector(".toast-action").addEventListener("click", () => {
         if (_toastTimer) clearTimeout(_toastTimer);
@@ -760,6 +852,7 @@
   }
 
   function render() {
+    if (accountDisabled) return renderDisabled();
     setCur(HOME_CUR); // default; period views set their own currency below
     // "History" and "Report" are now one combined "Reports" tab.
     if (state.view === "history") state.view = "report";
@@ -1211,6 +1304,25 @@
   }
 
   /* ---------- Dashboard ---------- */
+  // Subtle count-up for the hero amount (once per session; respects reduced motion).
+  function animateHeroAmount(to) {
+    const el = main.querySelector(".hero .amount");
+    if (!el) return;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || typeof requestAnimationFrame !== "function") { el.textContent = fmt(to); return; }
+    const dur = 650;
+    let start = null;
+    const step = (now) => {
+      if (start === null) start = now;
+      const t = Math.min(1, (now - start) / dur);
+      const ease = 1 - Math.pow(1 - t, 3);
+      el.textContent = fmt(to * ease);
+      if (t < 1) requestAnimationFrame(step);
+      else el.textContent = fmt(to);
+    };
+    requestAnimationFrame(step);
+  }
+
   function renderDashboard(p) {
     setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
@@ -1227,12 +1339,18 @@
 
     const renderCat = (c) => {
       const cs = catSpent(p, c.id);
+      const isSav = isSavingsCat(c);
       const pct = c.budgeted > 0 ? (cs / c.budgeted) * 100 : 0;
-      const cls = pct > 100 ? "over" : c.fixed ? "ok" : pct > 85 ? "warn" : "ok";
-      const over = cs > c.budgeted + 0.005;
+      // Savings/goal categories are money set aside on purpose — funding them is a
+      // win, never "over budget" and never a warning.
+      const over = !isSav && cs > c.budgeted + 0.005;
+      const funded = isSav && cs >= c.budgeted - 0.005;
+      const cls = isSav ? "good" : over ? "over" : c.fixed ? "ok" : pct > 85 ? "warn" : "ok";
       const pctLabel = c.budgeted > 0 ? Math.round(pct) + "%" : "—";
-      const remainAmt = over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs);
-      const remainLabel = over ? "over" : "left";
+      const remainAmt = isSav
+        ? (funded ? fmt(cs) : fmt(c.budgeted - cs))
+        : (over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs));
+      const remainLabel = isSav ? (funded ? "saved" : "to go") : (over ? "over" : "left");
       const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill" aria-label="Fixed bill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="9.5" rx="2.5"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg></span>` : "";
       return `
         <button type="button" class="cat-row cat-row-tap ${over ? "is-over" : ""}" data-cat="${c.id}"
@@ -1245,7 +1363,7 @@
             </span>
             <span class="cat-line cat-sub">
               <span class="cat-spent"><b>${fmt(cs)}</b> of ${fmt(c.budgeted)}</span>
-              <span class="cat-left ${over ? "over" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
+              <span class="cat-left ${over ? "over" : ""}${isSav ? " saved" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
             </span>
             <span class="bar"><span class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span>
           </span>
@@ -1310,7 +1428,6 @@
       ${dl === 0 ? (isVac
           ? `<button class="btn btn-primary btn-block period-ended" id="period-ended">🏖️ Your vacation ended — close it out</button>`
           : `<button class="btn btn-primary btn-block period-ended" id="period-ended">🎉 Your pay period ended — start the next one</button>`) : ""}
-      ${safetyBanner}
       <div class="card hero">
         <div class="hero-main">
           <div class="hero-eyebrow">Left to spend</div>
@@ -1332,6 +1449,8 @@
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
 
+      ${safetyBanner}
+
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
           <h2 style="margin:0;">Expense Categories</h2>
@@ -1349,10 +1468,15 @@
           <div class="sstat"><div class="sk">Budgeted</div><div class="sv">${fmt(budgeted)}</div></div>
           <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(spent)}</div></div>
         </div>
+        ${budgeted > periodIncome(p) + 0.005
+          ? `<div class="stat-hint">⚠️ You've budgeted ${fmt(budgeted - periodIncome(p))} more than your income — trim a category to give every dollar a job.</div>`
+          : ""}
       </div>
 
       <button class="btn btn-block btn-payday" id="new-payday">${isVac ? "End vacation" : "Got paid? Start a new pay period"}</button>
     `;
+
+    if (!_heroAnimated) { _heroAnimated = true; try { animateHeroAmount(remaining); } catch (e) {} }
 
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     const catLog = document.getElementById("cat-log-spend");
@@ -1882,7 +2006,7 @@
     // Top categories = discretionary only (exclude fixed bills — they don't vary).
     const catTotals = p.categories
       .map((c) => ({ c, amt: catSpent(p, c.id) }))
-      .filter((x) => x.amt > 0 && !x.c.fixed)
+      .filter((x) => x.amt > 0 && !x.c.fixed && !isSavingsCat(x.c))
       .sort((a, b) => b.amt - a.amt);
     const discTotal = catTotals.reduce((s, x) => s + x.amt, 0);
     const topCats = catTotals.slice(0, 3);
@@ -1926,8 +2050,25 @@
       if (activeFilter === "fixed") return c && !!c.fixed;
       return t.categoryId === activeFilter;
     };
-    const filtered = txns.filter(matchesFilter);
-    const filteredTotal = filtered.reduce((s, t) => s + Number(t.amount), 0);
+    // Search (notes / category / amount) + date range, layered on the chip filter.
+    const searchActive = () => !!(_spendQuery || _spendFrom || _spendTo);
+    function computeFiltered() {
+      const q = (_spendQuery || "").trim().toLowerCase();
+      const fromD = _spendFrom || "", toD = _spendTo || "";
+      return txns.filter((t) => {
+        if (!matchesFilter(t)) return false;
+        if (fromD && (t.date || "") < fromD) return false;
+        if (toD && (t.date || "") > toD) return false;
+        if (q) {
+          const c = catById[t.categoryId] || {};
+          if (!(String(t.description || "").toLowerCase().includes(q) ||
+                String(c.name || "").toLowerCase().includes(q) ||
+                String(t.amount).includes(q))) return false;
+        }
+        return true;
+      });
+    }
+    const filtered = computeFiltered();
 
     // Offer the discretionary / fixed split only when both kinds of spending exist.
     const typeChips =
@@ -1957,11 +2098,14 @@
          </div>`
       : "";
 
-    const list = filtered.length
-      ? filtered
-          .map((t) => {
-            const c = catById[t.categoryId] || { emoji: "❓", name: "Uncategorized" };
-            return `
+    function listHTML(items) {
+      if (!items.length) {
+        return `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" && !searchActive() ? "No spending logged yet this period. Tap “Log spend” up top to add one." : "Nothing matches your search or filters."}</p></div>`;
+      }
+      return items
+        .map((t) => {
+          const c = catById[t.categoryId] || { emoji: "❓", name: "Uncategorized" };
+          return `
           <div class="txn" data-id="${t.id}">
             <button type="button" class="txn-left txn-edit" data-edit="${t.id}" aria-label="Edit ${esc(t.description || c.name)}">
               <div class="txn-emoji">${esc(c.emoji)}</div>
@@ -1975,18 +2119,33 @@
               <button class="rm" data-rm="${t.id}" title="Delete" aria-label="Delete ${esc(t.description || c.name)}">🗑</button>
             </div>
           </div>`;
-          })
-          .join("")
-      : `<div class="empty"><div class="big">🧾</div><p>${activeFilter === "all" ? "No spending logged yet this period. Tap “Log spend” up top to add one." : "Nothing matches this filter yet."}</p></div>`;
+        })
+        .join("");
+    }
+    function sublineText(items) {
+      const filterName =
+        activeFilter === "discretionary" ? "discretionary spending"
+        : activeFilter === "fixed" ? "fixed bills"
+        : (catById[activeFilter] || {}).name || "category";
+      const totalOf = items.reduce((s, t) => s + Number(t.amount), 0);
+      if (activeFilter === "all" && !searchActive())
+        return `${items.length} ${items.length === 1 ? "transaction" : "transactions"}${txns.length ? " · tap one to edit" : ""}`;
+      const scope = activeFilter === "all" ? "" : ` in ${esc(filterName)}`;
+      return `${items.length} ${items.length === 1 ? "transaction" : "transactions"} · ${fmt(totalOf)}${scope}`;
+    }
 
-    const filterName =
-      activeFilter === "discretionary" ? "discretionary spending"
-      : activeFilter === "fixed" ? "fixed bills"
-      : (catById[activeFilter] || {}).name || "category";
-    const subline =
-      activeFilter === "all"
-        ? `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"}${txns.length ? " · tap one to edit" : ""}`
-        : `${filtered.length} ${filtered.length === 1 ? "transaction" : "transactions"} · ${fmt(filteredTotal)} in ${esc(filterName)}`;
+    // Search + date-range controls (only meaningful once there are transactions).
+    const searchRow = txns.length
+      ? `<div class="spend-search">
+           <input id="sp-search" type="search" inputmode="search" placeholder="Search notes or categories…" value="${esc(_spendQuery || "")}" aria-label="Search transactions" />
+           <div class="spend-dates">
+             <input id="sp-from" type="date" value="${esc(_spendFrom || "")}" aria-label="From date" />
+             <span class="spend-dash" aria-hidden="true">–</span>
+             <input id="sp-to" type="date" value="${esc(_spendTo || "")}" aria-label="To date" />
+             <button type="button" class="chip sp-clear" id="sp-clear"${searchActive() ? "" : " hidden"}>Clear</button>
+           </div>
+         </div>`
+      : "";
 
     main.innerHTML = `
       <div class="card spend-sum">
@@ -2002,12 +2161,57 @@
         </div>` : ""}
       </div>
       <div class="card">
-        <p class="sub" style="margin-top:0;">${subline}</p>
+        <p class="sub" id="spend-subline" style="margin-top:0;">${sublineText(filtered)}</p>
+        ${searchRow}
         ${filterRow}
         ${sortRow}
-        ${list}
+        <div id="spend-list">${listHTML(filtered)}</div>
       </div>
     `;
+
+    // Re-attach per-row edit/delete handlers (list innerHTML is rebuilt on search).
+    function wireRows() {
+      main.querySelectorAll("[data-edit]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const t = p.transactions.find((x) => x.id === btn.dataset.edit);
+          if (t) openSpendModal(p, null, t);
+        })
+      );
+      main.querySelectorAll("[data-rm]").forEach((btn) =>
+        btn.addEventListener("click", () => {
+          const res = deleteTxn(p, btn.dataset.rm);
+          if (!res) return;
+          save();
+          render();
+          showToast("Transaction deleted", "Undo", () => {
+            restoreTxn(p, res.removed, res.idx);
+            save();
+            render();
+          });
+        })
+      );
+    }
+
+    // Partial redraw on search/date change — keeps the search box focused.
+    function redrawList() {
+      const items = computeFiltered();
+      const lc = document.getElementById("spend-list");
+      const sl = document.getElementById("spend-subline");
+      if (lc) lc.innerHTML = listHTML(items);
+      if (sl) sl.innerHTML = sublineText(items);
+      const clr = document.getElementById("sp-clear");
+      if (clr) clr.hidden = !searchActive();
+      wireRows();
+    }
+
+    const searchInput = document.getElementById("sp-search");
+    if (searchInput) searchInput.addEventListener("input", () => { _spendQuery = searchInput.value; redrawList(); });
+    const fromInput = document.getElementById("sp-from");
+    if (fromInput) fromInput.addEventListener("change", () => { _spendFrom = fromInput.value; redrawList(); });
+    const toInput = document.getElementById("sp-to");
+    if (toInput) toInput.addEventListener("change", () => { _spendTo = toInput.value; redrawList(); });
+    const clearSearch = document.getElementById("sp-clear");
+    if (clearSearch) clearSearch.addEventListener("click", () => { _spendQuery = ""; _spendFrom = ""; _spendTo = ""; render(); });
 
     const sortEl = document.getElementById("spend-sort");
     if (sortEl)
@@ -2027,26 +2231,7 @@
         render();
       });
 
-    main.querySelectorAll("[data-edit]").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const t = p.transactions.find((x) => x.id === btn.dataset.edit);
-        if (t) openSpendModal(p, null, t);
-      })
-    );
-
-    main.querySelectorAll("[data-rm]").forEach((btn) =>
-      btn.addEventListener("click", () => {
-        const res = deleteTxn(p, btn.dataset.rm);
-        if (!res) return;
-        save();
-        render();
-        showToast("Transaction deleted", "Undo", () => {
-          restoreTxn(p, res.removed, res.idx);
-          save();
-          render();
-        });
-      })
-    );
+    wireRows();
   }
 
   // editTxn: pass an existing transaction to edit it instead of adding a new one.
@@ -2082,8 +2267,10 @@
   function parseQuickAdd(text, cats) {
     const raw = String(text || "").trim();
     if (!raw) return { amount: null, categoryId: null, note: "" };
-    const m = raw.match(/\d+(?:[.,]\d+)?/);
-    const amount = m ? Number(m[0].replace(",", ".")) : null;
+    // Grab a number that may use commas as thousands separators (en-US),
+    // e.g. "1,000" or "1,234.56"; fall back to a plain/decimal number.
+    const m = raw.match(/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/);
+    const amount = m ? Number(m[0].replace(/,/g, "")) : null;
     let rest = raw;
     if (m) rest = rest.slice(0, m.index) + " " + rest.slice(m.index + m[0].length);
     rest = rest.replace(/\$/g, " ").replace(/\s+/g, " ").trim();
@@ -2130,7 +2317,7 @@
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="${editing ? "Edit spending" : "Log spending"}">
           <h2>${editing ? "Edit spending" : "Log spending"}</h2>
-          ${editing ? "" : `
+          ${editing || !flagOn("quickAdd", true) ? "" : `
           <div class="field quick-add-field">
             <label for="sp-quick">⚡ Quick add</label>
             <input id="sp-quick" placeholder="Type it — e.g. “38 ramen” or “12 coffee”" autocomplete="off" enterkeyhint="done" />
@@ -2386,17 +2573,37 @@
     const hasHomeHistory = nH > 0;
     const totalSaved = closedHome.reduce((s, p) => s + periodSaved(p), 0);
     const avgSaved = nH ? totalSaved / nH : 0;
-    const avgSpent = nH ? closedHome.reduce((s, p) => s + totalSpent(p), 0) / nH : 0;
+    const avgSpent = nH ? closedHome.reduce((s, p) => s + periodConsumed(p), 0) / nH : 0;
 
     // Savings per period — oldest→newest, most recent 8.
     const chrono = closedHome.slice().reverse().slice(-8);
     const svals = chrono.map((p) => periodSaved(p));
     const smax = Math.max(1, ...svals.map((v) => Math.abs(v)));
-    const chart = `<div class="savings-chart">${chrono
+    // Diverging bar chart: kept (green, up) vs overspent (red, down) around a zero line.
+    const chart = `<div class="dv-chart"><div class="dv-zero" aria-hidden="true"></div>${chrono
       .map((p, i) => {
         const v = svals[i];
-        const h = Math.max(4, Math.round((Math.abs(v) / smax) * 100));
-        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${v < 0 ? "neg" : ""}" style="height:${h}%" title="${fmt(v)}"></div></div><div class="sc-x">${esc(fmtDateShort(p.startDate))}</div><div class="sc-v">${esc(fmtCompact(v))}</div></div>`;
+        const h = Math.max(3, Math.round((Math.abs(v) / smax) * 46));
+        const pos = v >= 0;
+        return `<div class="dv-col">
+          <div class="dv-bars">
+            <div class="dv-slot dv-pos">${pos ? `<div class="dv-bar pos" style="height:${h}px" title="${esc(fmt(v))}"></div>` : ""}</div>
+            <div class="dv-slot dv-neg">${!pos ? `<div class="dv-bar neg" style="height:${h}px" title="${esc(fmt(v))}"></div>` : ""}</div>
+          </div>
+          <div class="dv-x">${esc(fmtDateShort(p.startDate))}</div>
+          <div class="dv-v ${pos ? "" : "neg"}">${esc(fmtCompact(v))}</div>
+        </div>`;
+      })
+      .join("")}</div>`;
+
+    // Save rate (share of income kept) over the same recent periods.
+    const rateSeries = saveRateSeries(chrono);
+    const avgRate = rateSeries.length ? rateSeries.reduce((s, r) => s + r.rate, 0) / rateSeries.length : 0;
+    const rateChart = `<div class="savings-chart">${rateSeries
+      .map((r) => {
+        const pct = Math.round(r.rate * 100);
+        const h = r.rate <= 0 ? 4 : Math.max(4, Math.min(100, pct));
+        return `<div class="sc-col"><div class="sc-track"><div class="sc-bar ${r.rate < 0 ? "neg" : ""}" style="height:${h}%" title="${pct}%"></div></div><div class="sc-x">${esc(fmtDateShort(r.startDate))}</div><div class="sc-v ${r.rate < 0 ? "neg" : ""}">${pct}%</div></div>`;
       })
       .join("")}</div>`;
 
@@ -2404,6 +2611,7 @@
     const overCount = {};
     closed.forEach((p) =>
       p.categories.forEach((c) => {
+        if (isSavingsCat(c)) return; // saving past a goal isn't "over budget"
         if (c.budgeted > 0 && catSpent(p, c.id) > c.budgeted + 0.005) {
           const key = `${c.emoji}||${c.name}`;
           overCount[key] = (overCount[key] || 0) + 1;
@@ -2416,6 +2624,7 @@
     const catStats = {};
     closedHome.forEach((p) =>
       p.categories.forEach((c) => {
+        if (isSavingsCat(c)) return; // "Spending patterns" is about spending, not set-asides
         const key = `${c.emoji}||${c.name}`;
         const s = catStats[key] || (catStats[key] = { emoji: c.emoji, name: c.name, total: 0, count: 0, last: null });
         const cs = catSpent(p, c.id);
@@ -2477,7 +2686,7 @@
     const items = closed
       .map((p) => {
         setCur(curOf(p)); // format each row in its own currency
-        const spent = totalSpent(p);
+        const spent = periodConsumed(p);
         const saved = periodSaved(p);
         const vacTag = periodKind(p) === "vacation" ? ` · 🏖️ ${curOf(p)}` : "";
         return `
@@ -2501,11 +2710,15 @@
         <div class="ins-label">Total saved to date</div>
         <div class="ins-amount ${totalSaved < 0 ? "neg" : ""}">${fmt(totalSaved)}</div>
         <div class="ins-sub">across ${nH} pay period${nH === 1 ? "" : "s"} · avg ${fmt(avgSaved)} saved · ${fmt(avgSpent)} spent</div>
+        <div class="ins-divider"></div>
+        <h2 style="margin:0 0 2px;">Saved per period</h2>
+        <p class="sub">Most recent ${chrono.length} period${chrono.length === 1 ? "" : "s"} · <span class="dv-key pos">kept</span> vs <span class="dv-key neg">overspent</span>.</p>
+        ${chart}
       </div>
       <div class="card">
-        <h2>Saved per period</h2>
-        <p class="sub">Most recent ${chrono.length} period${chrono.length === 1 ? "" : "s"}.</p>
-        ${chart}
+        <h2>Save rate</h2>
+        <p class="sub">Share of income kept — averaging <b>${Math.round(avgRate * 100)}%</b> over the last ${chrono.length} period${chrono.length === 1 ? "" : "s"}.</p>
+        ${rateChart}
       </div>
       ${
         topOver.length
@@ -2532,7 +2745,26 @@
       </div>`
       : `<div class="card"><h2>History</h2><p class="sub" style="margin:0;">Your saved totals, trends, and past pay periods appear here once you finish a pay period.</p></div>`;
 
-    main.innerHTML = goalsCard + analyticsCards + historyCard + exportCard;
+    // Split the long Reports scroll into a segmented Insights / History view.
+    // Goals stay pinned at the top; Export & share stays pinned at the bottom.
+    const segTab = _reportTab === "history" ? "history" : "insights";
+    const seg = hasHistory
+      ? `<div class="chips report-seg" id="report-seg" role="group" aria-label="Report view">
+           <button type="button" class="chip ${segTab === "insights" ? "active" : ""}" data-rtab="insights">📈 Insights</button>
+           <button type="button" class="chip ${segTab === "history" ? "active" : ""}" data-rtab="history">🗂️ History</button>
+         </div>`
+      : "";
+    const middle = hasHistory ? (segTab === "insights" ? analyticsCards : historyCard) : historyCard;
+    main.innerHTML = goalsCard + seg + middle + exportCard;
+
+    const segEl = document.getElementById("report-seg");
+    if (segEl)
+      segEl.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-rtab]");
+        if (!b) return;
+        _reportTab = b.dataset.rtab;
+        render();
+      });
 
     document.getElementById("rp-period").addEventListener("change", (e) => { state._reportId = e.target.value; render(); });
     const rpShare = document.getElementById("rp-share");
@@ -2714,7 +2946,7 @@
     setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
     const income = periodIncome(p);
-    const spent = totalSpent(p);
+    const spent = periodConsumed(p);
     const budgeted = totalBudgeted(p);
     const saved = periodSaved(p);
     const rate = income > 0 ? Math.round((saved / income) * 100) : 0;
@@ -2889,7 +3121,7 @@
    * ------------------------------------------------------------------ */
   function buildReport(p) {
     const budgeted = totalBudgeted(p);
-    const spent = totalSpent(p);
+    const spent = periodConsumed(p); // savings-funding counts as saved, not spent
     const remaining = budgeted - spent;
     const saved = periodIncome(p) - spent;
     const unbudgeted = periodIncome(p) - budgeted;
@@ -3203,6 +3435,49 @@
     } catch (e) {}
   }
 
+  // Build a spreadsheet-friendly CSV of every logged transaction (pure/testable).
+  function transactionsCSV(st) {
+    const q = (v) => {
+      const s = String(v == null ? "" : v);
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const rows = [["Date", "Category", "Amount", "Note", "Period start", "Budget type", "Fixed bill"]];
+    let count = 0;
+    ((st && st.periods) || []).forEach((p) => {
+      const byId = {};
+      (p.categories || []).forEach((c) => { byId[c.id] = c; });
+      const kind = p.kind === "vacation" ? "Vacation" : "Payday";
+      (p.transactions || [])
+        .slice()
+        .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+        .forEach((t) => {
+          const c = byId[t.categoryId] || {};
+          const name = ((c.emoji ? c.emoji + " " : "") + (c.name || "Uncategorized")).trim();
+          rows.push([t.date || "", name, Number(t.amount || 0), t.description || "", p.startDate || "", kind, c.fixed ? "yes" : "no"]);
+          count++;
+        });
+    });
+    return { csv: rows.map((r) => r.map(q).join(",")).join("\r\n"), count };
+  }
+
+  // Export ALL transactions (every period) as a download. Distinct from the
+  // Reports tab's per-period exportCSV(p).
+  function exportAllCSV() {
+    const { csv, count } = transactionsCSV(state);
+    if (!count) { showToast("No transactions to export yet."); return; }
+    // Prepend a BOM so Excel reads UTF-8 (emoji, accents) correctly.
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `yosan-transactions-${todayISO()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`Exported ${count} transaction${count === 1 ? "" : "s"} ✓`);
+  }
+
   // Human-friendly "last backup" line for Settings.
   function lastBackupLabel() {
     const ts = Number(localStorage.getItem(STORAGE_KEY + "-lastbackup") || 0);
@@ -3251,12 +3526,17 @@
       : cloudUser
       ? `<div class="section-label set-sec">Account</div>
          <div class="set-status">
-           <span class="set-status-txt">☁️ Synced as ${esc(currentEmail())}</span>
+           <span class="set-status-txt">☁️ Synced as ${esc(currentEmail())}<span class="role-badge role-${currentRole()}">${esc(roleLabel(currentRole()))}</span></span>
            <button class="btn btn-ghost btn-xs" id="set-signout">Sign out</button>
          </div>`
       : `<div class="section-label set-sec">Account</div>
          <button class="btn btn-primary btn-block" id="set-signin">☁️ Sign in to sync</button>
-         <p class="footer-note" style="margin:6px 0 0;">Sync across devices and share monthly results.</p>`;
+         <p class="footer-note" style="margin:6px 0 0;">You're browsing as <b>Guest</b> — sign in to sync across devices and share monthly results.</p>`;
+    const adminBlock = isAdmin()
+      ? `<div class="section-label set-sec">Admin</div>
+         <button class="btn btn-primary btn-block" id="set-admin">🛠️ Open admin panel</button>
+         <p class="footer-note" style="margin:6px 0 0;">Manage users, view accounts, broadcast a message, and toggle features.</p>`
+      : "";
     const { close } = mountModal(`
       <div class="modal-overlay">
         <div class="modal" role="dialog" aria-modal="true" aria-label="Settings and backup">
@@ -3265,7 +3545,9 @@
 
           ${cloudBlock}
 
-          <div class="section-label set-sec">Preferences</div>
+          ${adminBlock}
+
+          ${flagOn("vacationMode", true) ? `<div class="section-label set-sec">Preferences</div>
           <div class="vac-row">
             <div class="vac-copy">
               <div class="vac-title">🏖️ Vacation Mode</div>
@@ -3275,7 +3557,7 @@
               <input type="checkbox" id="set-vacation" ${state.vacationMode ? "checked" : ""} />
               <span class="switch-track" aria-hidden="true"></span>
             </label>
-          </div>
+          </div>` : ""}
 
           <div class="section-label set-sec">Your data</div>
           <div class="field-row">
@@ -3284,6 +3566,7 @@
             <input type="file" id="set-import-file" accept="application/json,.json" style="position:absolute;width:1px;height:1px;opacity:0;" />
           </div>
           <p class="footer-note" style="margin:8px 0 0;">${esc(lastBackupLabel())} · saves a <code>.json</code> you can keep or move to another device. Restoring replaces everything here.</p>
+          <button class="btn btn-ghost btn-block btn-sm" id="set-export-csv" style="margin-top:10px;">📄 Export transactions (CSV)</button>
 
           <button class="btn btn-ghost btn-block" id="set-close" style="margin-top:22px;">Close</button>
           <p class="set-version">Version ${esc(APP_VERSION)} · ${periods} pay period${periods === 1 ? "" : "s"} · ${txns} transaction${txns === 1 ? "" : "s"}</p>
@@ -3307,6 +3590,12 @@
         close();
         showToast("Signed out — syncing off");
       });
+    const adminBtn = document.getElementById("set-admin");
+    if (adminBtn)
+      adminBtn.addEventListener("click", () => {
+        close();
+        openAdminPanel();
+      });
 
     const vacToggle = document.getElementById("set-vacation");
     if (vacToggle)
@@ -3319,6 +3608,7 @@
       });
 
     document.getElementById("set-export").addEventListener("click", exportData);
+    document.getElementById("set-export-csv").addEventListener("click", exportAllCSV);
 
     document.getElementById("set-import-file").addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
@@ -3350,18 +3640,308 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Admin panel (only shown to ADMIN_EMAIL; Firestore rules enforce it).
+   * ------------------------------------------------------------------ */
+  // Flags the admin can toggle app-wide. Each is honored via flagOn(key).
+  const ADMIN_FLAGS = [
+    { key: "quickAdd", label: "Quick add (natural-language spend)", dflt: true },
+    { key: "vacationMode", label: "Vacation Mode available", dflt: true },
+  ];
+
+  function admRelTime(ts) {
+    const s = Math.max(0, Math.floor((Date.now() - Number(ts || 0)) / 1000));
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + "m ago";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + "h ago";
+    const d = Math.floor(h / 24);
+    if (d < 30) return d + "d ago";
+    return Math.floor(d / 30) + "mo ago";
+  }
+
+  function openAdminPanel() {
+    if (!isAdmin()) return;
+    const bTxt = (appConfig && appConfig.banner && appConfig.banner.text) || "";
+    const bOn = !!(appConfig && appConfig.banner && appConfig.banner.active);
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal admin-modal" role="dialog" aria-modal="true" aria-label="Admin panel">
+          <h2>🛠️ Admin</h2>
+          <p class="sub">Signed in as ${esc(currentEmail())} · full access.</p>
+
+          <div class="section-label set-sec">📢 Broadcast</div>
+          <div class="field">
+            <textarea id="adm-banner" rows="2" placeholder="A short message shown to everyone at the top of the app…">${esc(bTxt)}</textarea>
+          </div>
+          <div class="adm-ctl-row">
+            <label class="switch"><input type="checkbox" id="adm-banner-on" ${bOn ? "checked" : ""} /><span class="switch-track" aria-hidden="true"></span></label>
+            <span class="adm-ctl-lbl">Show banner to everyone</span>
+            <button class="btn btn-primary btn-sm" id="adm-banner-save">Save</button>
+          </div>
+
+          <div class="section-label set-sec">Feature flags</div>
+          <div id="adm-flags"></div>
+
+          <div class="section-label set-sec">Users <span id="adm-usercount" class="adm-count"></span></div>
+          <div id="adm-users" class="adm-users"></div>
+
+          <button class="btn btn-ghost btn-block" id="adm-close" style="margin-top:18px;">Close</button>
+        </div>
+      </div>
+    `);
+
+    const done = () => { adminPanelRefresh = null; close(); };
+    document.getElementById("adm-close").addEventListener("click", done);
+
+    // Broadcast save
+    document.getElementById("adm-banner-save").addEventListener("click", () => {
+      const text = document.getElementById("adm-banner").value.trim();
+      const active = document.getElementById("adm-banner-on").checked;
+      Cloud.saveConfig({ banner: { text, active }, updatedAt: Date.now(), updatedBy: currentEmail() || "" })
+        .then(() => showToast(active && text ? "Broadcast on 📢" : "Broadcast cleared"))
+        .catch(() => showToast("Couldn't save — check connection/rules."));
+    });
+
+    // Feature-flag toggles
+    const flagsHost = document.getElementById("adm-flags");
+    flagsHost.innerHTML = ADMIN_FLAGS.map((f) =>
+      `<div class="adm-ctl-row">
+         <label class="switch"><input type="checkbox" data-flag="${esc(f.key)}" ${flagOn(f.key, f.dflt) ? "checked" : ""} /><span class="switch-track" aria-hidden="true"></span></label>
+         <span class="adm-ctl-lbl">${esc(f.label)}</span>
+       </div>`).join("");
+    flagsHost.addEventListener("change", (e) => {
+      const cb = e.target.closest("[data-flag]");
+      if (!cb) return;
+      const patch = { flags: {} };
+      patch.flags[cb.dataset.flag] = cb.checked;
+      Cloud.saveConfig(patch)
+        .then(() => showToast("Saved ✓"))
+        .catch(() => { cb.checked = !cb.checked; showToast("Couldn't save — check connection/rules."); });
+    });
+
+    // Live users directory
+    const usersHost = document.getElementById("adm-users");
+    const countEl = document.getElementById("adm-usercount");
+    const paintUsers = () => {
+      if (!document.body.contains(usersHost)) { adminPanelRefresh = null; return; }
+      countEl.textContent = usersCache.length ? "· " + usersCache.length : "";
+      if (!usersCache.length) {
+        usersHost.innerHTML = `<p class="footer-note">No accounts yet. Users appear here once they sign in.</p>`;
+        return;
+      }
+      usersHost.innerHTML = usersCache.map((u) => {
+        const me = cloudUser && u.uid === cloudUser.uid;
+        const when = u.lastActive ? admRelTime(u.lastActive) : "—";
+        return `
+          <div class="adm-user ${u.disabled ? "is-disabled" : ""}">
+            <div class="adm-user-main">
+              <div class="adm-user-name">${esc(u.name || u.email || "User")}<span class="role-badge role-${esc(u.role || "user")}">${esc(roleLabel(u.role))}</span>${u.disabled ? '<span class="adm-tag">paused</span>' : ""}</div>
+              <div class="adm-user-sub">${esc(u.email || "")} · ${esc(u.deployment || "")} · ${esc(when)}</div>
+            </div>
+            <div class="adm-user-actions">
+              <button class="btn btn-ghost btn-xs" data-uview="${esc(u.budgetKey || "")}">View</button>
+              ${me ? "" : `<button class="btn btn-ghost btn-xs" data-utoggle="${esc(u.uid)}">${u.disabled ? "Enable" : "Pause"}</button>`}
+            </div>
+          </div>`;
+      }).join("");
+    };
+    paintUsers();
+    adminPanelRefresh = paintUsers;
+
+    usersHost.addEventListener("click", (e) => {
+      const v = e.target.closest("[data-uview]");
+      if (v) { openAdminUserView(v.dataset.uview); return; }
+      const t = e.target.closest("[data-utoggle]");
+      if (t) {
+        const u = usersCache.find((x) => x.uid === t.dataset.utoggle);
+        if (!u) return;
+        const next = !u.disabled;
+        if (next && !confirm(`Pause ${u.name || u.email}? They'll be locked out of the app until you re-enable them. Their data stays safe.`)) return;
+        Cloud.updateUser(u.uid, { disabled: next })
+          .then(() => showToast(next ? "Account paused" : "Account enabled"))
+          .catch(() => showToast("Couldn't update — check connection/rules."));
+      }
+    });
+  }
+
+  // Read-only summary of another account's published budget + results.
+  function renderAdminUserSummary(budget, results) {
+    const data = budget && budget.data;
+    if (!data || !Array.isArray(data.periods) || !data.periods.length) {
+      return `<p class="footer-note">No budget data published yet.</p>`;
+    }
+    const periods = data.periods;
+    const openP = periods.slice().reverse().find((p) => !p.closed && p.kind !== "vacation") || periods[periods.length - 1];
+    const cats = openP.categories || [];
+    const txns = openP.transactions || [];
+    const budgeted = cats.reduce((s, c) => s + Number(c.budgeted || 0), 0);
+    const spent = txns.reduce((s, t) => s + Number(t.amount || 0), 0);
+    const income = Number(openP.paycheckAmount || 0) + (openP.extraIncome || []).reduce((s, i) => s + Number(i.amount || 0), 0);
+    const left = budgeted - spent;
+    const catRows = cats.map((c) => {
+      const cs = txns.filter((t) => t.categoryId === c.id).reduce((s, t) => s + Number(t.amount || 0), 0);
+      return `<div class="adm-catrow"><span>${esc(c.emoji || "")} ${esc(c.name || "")}</span><span>${esc(fmt(cs))} / ${esc(fmt(Number(c.budgeted || 0)))}</span></div>`;
+    }).join("");
+    const months = (results && results.months) || [];
+    const updated = budget && budget.updatedAt ? admRelTime(budget.updatedAt) : "—";
+    return `
+      <div class="adm-stats">
+        <div class="adm-stat"><div class="sk">Left</div><div class="sv">${esc(fmt(left))}</div></div>
+        <div class="adm-stat"><div class="sk">Income</div><div class="sv">${esc(fmt(income))}</div></div>
+        <div class="adm-stat"><div class="sk">Budgeted</div><div class="sv">${esc(fmt(budgeted))}</div></div>
+        <div class="adm-stat"><div class="sk">Spent</div><div class="sv">${esc(fmt(spent))}</div></div>
+      </div>
+      <p class="footer-note">Current period · ${cats.length} categories · ${txns.length} logged · updated ${esc(updated)}</p>
+      <div class="section-label set-sec">Categories</div>
+      ${catRows || '<p class="footer-note">No categories.</p>'}
+      <div class="section-label set-sec">Shared results</div>
+      <p class="footer-note">${months.length} month${months.length === 1 ? "" : "s"} on record.</p>
+    `;
+  }
+
+  function openAdminUserView(budgetKey) {
+    if (!isAdmin() || !budgetKey) return;
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="User budget">
+          <h2>👤 ${esc(budgetKey)}</h2>
+          <div id="auv-body"><p class="sub">Loading…</p></div>
+          <button class="btn btn-ghost btn-block" id="auv-close" style="margin-top:16px;">Close</button>
+        </div>
+      </div>
+    `);
+    document.getElementById("auv-close").addEventListener("click", close);
+    Promise.all([Cloud.getBudget(budgetKey), Cloud.getResults(budgetKey)]).then(([budget, results]) => {
+      const body = document.getElementById("auv-body");
+      if (body) body.innerHTML = renderAdminUserSummary(budget, results);
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
    * Cloud sync (Firebase) — optional; app works fully without it.
    * ------------------------------------------------------------------ */
   const cloudOn = () => !!(window.Cloud && Cloud.available);
   const currentEmail = () => (cloudUser && cloudUser.email ? cloudUser.email : null);
 
+  /* ---- Roles ---------------------------------------------------------- *
+   * guest = not signed in (local only) · user = signed in (syncs their budget)
+   * admin = signed in as ADMIN_EMAIL (user directory + app controls).
+   * The client only reveals admin UI; Firestore rules do the real enforcing. */
+  const isAdminEmail = (e) => !!e && String(e).toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  function currentRole() {
+    if (!cloudUser) return "guest";
+    return isAdminEmail(cloudUser.email) ? "admin" : "user";
+  }
+  const isAdmin = () => currentRole() === "admin";
+  const roleLabel = (r) => (r === "admin" ? "Admin" : r === "user" ? "Member" : "Guest");
+  // A feature flag from app/config; defaults to `dflt` (on) when config is absent,
+  // so nothing users rely on disappears just because config hasn't loaded.
+  function flagOn(key, dflt) {
+    const d = dflt === undefined ? true : dflt;
+    const f = appConfig && appConfig.flags;
+    return f && typeof f[key] === "boolean" ? f[key] : d;
+  }
+
+  // Publish (merge) our small profile so an admin can enumerate accounts.
+  function publishUserProfile() {
+    if (!cloudUser) return;
+    Cloud.saveUser(cloudUser.uid, {
+      uid: cloudUser.uid,
+      email: cloudUser.email || "",
+      name: PERSON_NAME,
+      budgetKey: BUDGET_KEY,
+      deployment: BUDGET_KEY,
+      role: currentRole(),
+      appVersion: APP_VERSION,
+      lastActive: Date.now(),
+    });
+  }
+
+  // Watch our own user doc so an admin toggling `disabled` locks this device.
+  function watchSelfUser() {
+    if (selfUserUnsub) { selfUserUnsub(); selfUserUnsub = null; }
+    if (!cloudUser) return;
+    selfUserUnsub = Cloud.watchUser(cloudUser.uid, (doc) => {
+      const now = !!(doc && doc.disabled);
+      if (now !== accountDisabled) { accountDisabled = now; render(); }
+    });
+  }
+
+  // Admin: keep a live directory of all accounts (rules gate the read).
+  function watchAllUsers() {
+    if (usersUnsub) return;
+    usersUnsub = Cloud.watchUsers((list) => {
+      usersCache = (list || []).slice().sort((a, b) => (b.lastActive || 0) - (a.lastActive || 0));
+      if (adminPanelRefresh) adminPanelRefresh();
+    });
+  }
+  function stopAllUsers() {
+    if (usersUnsub) { usersUnsub(); usersUnsub = null; }
+    usersCache = [];
+  }
+
+  // Broadcast + flags: watch once, for everyone (signed in or not).
+  function watchAppConfig() {
+    if (configUnsub || !cloudOn()) return;
+    configUnsub = Cloud.watchConfig((cfg) => {
+      appConfig = cfg || null;
+      updateBroadcast();
+      if (adminPanelRefresh) adminPanelRefresh();
+    });
+  }
+
+  // An announcement bar the admin controls, shown above #main on every tab.
+  function updateBroadcast() {
+    const app = document.getElementById("app");
+    if (!app || !main) return;
+    let el = document.getElementById("broadcast-banner");
+    const b = appConfig && appConfig.banner;
+    const active = !!(b && b.active && b.text);
+    if (!active) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "broadcast-banner";
+      el.className = "broadcast-banner";
+      el.setAttribute("role", "status");
+      el.setAttribute("aria-live", "polite");
+      app.insertBefore(el, main);
+    }
+    el.textContent = "📢 " + b.text;
+  }
+
+  // Full-screen lock shown when an admin pauses this account.
+  function renderDisabled() {
+    setCur(HOME_CUR);
+    main.innerHTML = `
+      <div class="card locked-card">
+        <div class="locked-emoji">🔒</div>
+        <h2>Account paused</h2>
+        <p class="sub">An admin has paused this account. Your data is safe on this device. Contact the app owner if you think this is a mistake.</p>
+        <button class="btn btn-ghost btn-block" id="dis-signout" style="margin-top:14px;">Sign out</button>
+      </div>`;
+    const so = document.getElementById("dis-signout");
+    if (so) so.addEventListener("click", () => Cloud.signOut());
+  }
+
   function initCloud() {
     if (!cloudOn()) return; // SDK didn't load (e.g. offline) → stay local
     Cloud.init();
+    watchAppConfig(); // broadcast + flags reach everyone, signed in or not
     Cloud.onAuth((user) => {
       cloudUser = user || null;
-      if (user) startSync();
-      else stopSync();
+      if (user) {
+        startSync();
+        publishUserProfile();
+        watchSelfUser();
+        if (isAdmin()) watchAllUsers(); else stopAllUsers();
+      } else {
+        stopSync();
+        if (selfUserUnsub) { selfUserUnsub(); selfUserUnsub = null; }
+        stopAllUsers();
+        accountDisabled = false;
+        updateBroadcast();
+      }
       if (firstAuth) {
         firstAuth = false;
         // Prompt new visitors to sign in once; returning users are auto-signed-in.
@@ -3529,6 +4109,56 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * First-run onboarding — a 3-step intro so a brand-new visitor (esp. the
+   * public Beta) isn't dropped straight into an empty budget.
+   * ------------------------------------------------------------------ */
+  const ONBOARDED_KEY = () => STORAGE_KEY + "-onboarded";
+  function openOnboarding() {
+    const steps = [
+      { emoji: "💸", title: "Budget by paycheck", body: "Yosan budgets one paycheck at a time — tell it what you were paid, split it across categories, and see exactly what's left until your next payday." },
+      { emoji: "🗂️", title: "Give every dollar a job", body: "Set an amount for rent, groceries, fun, savings… Fixed bills and everyday spending are tracked separately, so nothing sneaks up on you." },
+      { emoji: "⚡", title: "Log as you go", body: "Tap “Log Spend” — or just type “38 ramen” — to record a purchase. Watch your daily pace, then start a fresh budget each payday." },
+    ];
+    let i = 0;
+    const { close } = mountModal(`<div class="modal-overlay"><div class="modal onb-modal" role="dialog" aria-modal="true" aria-label="Welcome to Yosan"><div id="onb-body"></div></div></div>`);
+    const done = () => {
+      try { localStorage.setItem(ONBOARDED_KEY(), "1"); } catch (e) {}
+      close();
+    };
+    function paint() {
+      const s = steps[i];
+      const dots = steps.map((_, k) => `<span class="onb-dot ${k === i ? "on" : ""}" aria-hidden="true"></span>`).join("");
+      document.getElementById("onb-body").innerHTML = `
+        <div class="onb-emoji">${s.emoji}</div>
+        <h2 class="onb-title">${esc(s.title)}</h2>
+        <p class="onb-text">${esc(s.body)}</p>
+        <div class="onb-dots">${dots}</div>
+        <div class="onb-actions">
+          ${i > 0 ? `<button class="btn btn-ghost" id="onb-back" style="flex:1;">Back</button>` : `<button class="btn btn-ghost" id="onb-skip" style="flex:1;">Skip</button>`}
+          <button class="btn btn-primary" id="onb-next" style="flex:2;">${i === steps.length - 1 ? "Get started →" : "Next"}</button>
+        </div>`;
+      const back = document.getElementById("onb-back");
+      if (back) back.addEventListener("click", () => { i--; paint(); });
+      const skip = document.getElementById("onb-skip");
+      if (skip) skip.addEventListener("click", done);
+      document.getElementById("onb-next").addEventListener("click", () => {
+        if (i === steps.length - 1) done();
+        else { i++; paint(); }
+      });
+    }
+    paint();
+  }
+  function maybeShowOnboarding() {
+    if (state.periods.length) return; // only brand-new users
+    let seen = false;
+    try { seen = !!localStorage.getItem(ONBOARDED_KEY()); } catch (e) {}
+    if (seen) return;
+    // Suppress the one-time sign-in prompt this session so two modals don't stack.
+    try { localStorage.setItem("pb-login-prompted", "1"); } catch (e) {}
+    openOnboarding();
+  }
+
+  /* ------------------------------------------------------------------ *
    * Tab navigation
    * ------------------------------------------------------------------ */
   document.getElementById("tabs").addEventListener("click", (e) => {
@@ -3566,7 +4196,55 @@
       if (p) openQuickAdd(p);
     });
 
+  // Test-only hook: exposes pure helpers to the Node/jsdom test harness.
+  // Never read by app code. Wrapped so a helper that a given deployment doesn't
+  // define (e.g. Derek uses computeResultsFor) just skips the hook, never crashes.
+  if (typeof window !== "undefined") {
+    try {
+      window.__yosanTest = {
+        parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
+        mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
+        transactionsCSV, saveRateSeries, periodConsumed, periodSaved,
+        setState: (s) => { state = s; },
+        getState: () => state,
+      };
+    } catch (e) { /* a helper isn't defined in this deployment — skip the hook */ }
+  }
+
+  // Offer "Update available — tap to refresh" when a new service-worker version
+  // is waiting. The SW no longer auto-skips waiting (see sw.js), so we prompt.
+  function initSWUpdates() {
+    if (!("serviceWorker" in navigator)) return;
+    let userAsked = false, reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // Reload only for a user-accepted update — not the first-visit SW claim.
+      if (userAsked && !reloaded) { reloaded = true; location.reload(); }
+    });
+    const offer = (reg) => {
+      if (!reg || !reg.waiting) return;
+      showToast("New version available", "Refresh", () => {
+        userAsked = true;
+        if (reg.waiting) reg.waiting.postMessage("SKIP_WAITING");
+      }, { sticky: true });
+    };
+    navigator.serviceWorker.ready
+      .then((reg) => {
+        if (!reg) return;
+        if (reg.waiting && navigator.serviceWorker.controller) offer(reg);
+        reg.addEventListener("updatefound", () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener("statechange", () => {
+            if (nw.state === "installed" && navigator.serviceWorker.controller) offer(reg);
+          });
+        });
+      })
+      .catch(() => {});
+  }
+
   /* Boot */
   render();
   initCloud();
+  maybeShowOnboarding();
+  initSWUpdates();
 })();
