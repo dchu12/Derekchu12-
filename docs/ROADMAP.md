@@ -1,6 +1,6 @@
 # Yosan — Roadmap & saved plans
 
-_Last updated: 2026-07-14. Live version at time of writing: **v123**._
+_Last updated: 2026-07-14. Live version at time of writing: **v124**._
 
 Three deployments, kept in sync on every change (now generated from one
 source — edit `src/app.js`, run `npm run build`; see the README):
@@ -12,7 +12,7 @@ source — edit `src/app.js`, run `npm run build`; see the README):
 
 **Needs a Firebase console visit by Derek — do these together to save a trip:**
 1. **Publish `firestore.rules`** — the roles + per-user access rules are written and committed but NOT live until published (Firestore Database → Rules → paste → Publish). See `docs/ADMIN.md`. Right after publishing: (a) confirm Kelly's exact account-email casing matches `isKelly()`, and (b) log a spend on Kelly's device to confirm sync still works.
-2. **#3 Push notifications** — payday reminder, "period ends in 2 days", near-a-limit. Needs Cloud Messaging enabled + a VAPID web-push key + `firebase-messaging-sw.js`. Claude builds the app side, then a click-by-click console walkthrough. (Details below under "Paused".)
+2. ~~**#3 Push notifications**~~ → shipped as **Path A local reminders** (v124): opt-in in Settings, fires payday / "period ending soon" / near-a-limit notifications. Foreground on all platforms (incl. Kelly's iPhone when the app is open); best-effort **background on Android** via Periodic Background Sync when the app is added to the Home screen. No backend, no cost. **Path B** (true scheduled push that wakes a closed phone, incl. iOS) still needs Firebase Blaze + a Cloud Function — left for later since we're not paying.
 3. **#4 Household linking** — optional sign-up + two-person shared summaries. Needs Email/Password sign-up enabled + the household Firestore rules. Decisions are locked (below). Pairs with tightening `isKelly()`/`isCore()` into real membership.
 
 **App-side follow-ups (no console needed, do anytime):**
