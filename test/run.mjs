@@ -170,6 +170,12 @@ eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
   eq(Math.round(r[0].rate * 100), 38, "save rate positive (1000/2600) — savings no longer sinks it");
 }
 
+/* ---- household invite code format ------------------------------------ */
+{
+  const codes = Array.from({ length: 50 }, () => T.genInviteCode());
+  ok(codes.every((c) => /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(c)), "invite code: 6 unambiguous chars");
+}
+
 /* ---- reminders (payday / ending-soon / near-limit + schedule) -------- */
 {
   const dISO = (n) => T.dateToISO(new Date(Date.now() + n * 86400000));
