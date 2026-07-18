@@ -170,6 +170,22 @@ eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
   eq(Math.round(r[0].rate * 100), 38, "save rate positive (1000/2600) — savings no longer sinks it");
 }
 
+/* ---- reminders (payday / ending-soon / near-limit + schedule) -------- */
+{
+  const dISO = (n) => T.dateToISO(new Date(Date.now() + n * 86400000));
+  const base = { frequency: "biweekly", kind: "payday", closed: false, transactions: [] };
+  const p0 = { ...base, id: "pp", startDate: dISO(-14), categories: [{ id: "a", name: "Food", budgeted: 100 }] };
+  ok(T.remindersFor(p0).some((r) => r.tag === "payday-pp"), "reminder: payday fires when period ended (dl 0)");
+  const p1 = { ...p0, id: "p1", startDate: dISO(-12) };
+  ok(T.remindersFor(p1).some((r) => r.tag === "ending-p1"), "reminder: ending-soon fires at 2 days left");
+  const p2 = { ...base, id: "p2", startDate: dISO(-1), categories: [{ id: "c", name: "Coffee", budgeted: 100 }], transactions: [{ categoryId: "c", amount: 95 }] };
+  ok(T.remindersFor(p2).some((r) => r.tag === "limit-p2-c"), "reminder: near-limit fires at 95%");
+  eq(T.remindersFor({ ...p0, closed: true }).length, 0, "reminder: none for a closed period");
+  const sch = T.reminderSchedule({ ...base, id: "p3", startDate: dISO(0), categories: [] });
+  eq(sch.find((x) => x.tag === "payday-p3").fireOn, dISO(14), "schedule: payday fires on the pay date (+14)");
+  eq(sch.find((x) => x.tag === "ending-p3").fireOn, dISO(12), "schedule: ending fires 2 days before");
+}
+
 /* ---- saveRateSeries (Reports save-rate trend) ------------------------ */
 {
   const series = T.saveRateSeries([

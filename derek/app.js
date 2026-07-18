@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "123";
+  const APP_VERSION = "124";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -3580,6 +3580,19 @@
             </label>
           </div>` : ""}
 
+          ${notifySupported() ? `
+          <div class="section-label set-sec">Reminders</div>
+          <div class="vac-row">
+            <div class="vac-copy">
+              <div class="vac-title">🔔 Payday &amp; budget reminders</div>
+              <div class="vac-note">Nudges for payday, "period ending soon", and nearing a category limit. Works best on Android with the app added to your Home screen; on iPhone they show while the app is open.</div>
+            </div>
+            <label class="switch" title="Toggle reminders">
+              <input type="checkbox" id="set-notify" ${notifyOn() ? "checked" : ""} />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>` : ""}
+
           <div class="section-label set-sec">Your data</div>
           <div class="field-row">
             <button class="btn btn-primary" id="set-export" style="flex:1;">⬇️ Download</button>
@@ -3635,6 +3648,19 @@
         save();
         render();
         showToast(state.vacationMode ? "Vacation Mode on 🏖️" : "Vacation Mode off");
+      });
+
+    const notifyToggle = document.getElementById("set-notify");
+    if (notifyToggle)
+      notifyToggle.addEventListener("change", async () => {
+        if (notifyToggle.checked) {
+          const ok = await enableReminders();
+          notifyToggle.checked = ok;
+          if (ok) showToast("Reminders on 🔔");
+        } else {
+          disableReminders();
+          showToast("Reminders off");
+        }
       });
 
     document.getElementById("set-export").addEventListener("click", exportData);
@@ -4267,7 +4293,7 @@
       window.__yosanTest = {
         parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
         mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
-        transactionsCSV, saveRateSeries, periodConsumed, periodSaved,
+        transactionsCSV, saveRateSeries, periodConsumed, periodSaved, remindersFor, reminderSchedule,
         setState: (s) => { state = s; },
         getState: () => state,
       };
@@ -4305,9 +4331,130 @@
       .catch(() => {});
   }
 
+  /* ------------------------------------------------------------------ *
+   * Reminders (local notifications — no backend). Best-effort background
+   * on Android (installed PWA + Periodic Background Sync); foreground-only
+   * on iOS. Opt-in from Settings.
+   * ------------------------------------------------------------------ */
+  const notifySupported = () => typeof Notification !== "undefined" && "serviceWorker" in navigator;
+  const notifyOn = () => notifySupported() && state.notify && state.notify.enabled && Notification.permission === "granted";
+
+  // Tiny IndexedDB kv store shared with the service worker (the SW can't read
+  // localStorage, so background reminders live here).
+  function remIdb() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open("yosan-reminders", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kv");
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  function remGet(key) {
+    return remIdb().then((db) => new Promise((res) => {
+      const q = db.transaction("kv", "readonly").objectStore("kv").get(key);
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => res(undefined);
+    })).catch(() => undefined);
+  }
+  function remSet(key, val) {
+    return remIdb().then((db) => new Promise((res) => {
+      const q = db.transaction("kv", "readwrite").objectStore("kv").put(val, key);
+      q.onsuccess = () => res();
+      q.onerror = () => res();
+    })).catch(() => {});
+  }
+
+  // Reminders true right now for the active pay period (shown in the foreground).
+  function remindersFor(p) {
+    const out = [];
+    if (!p || periodKind(p) === "vacation" || p.closed) return out;
+    const dl = daysLeft(p);
+    if (dl === 0) out.push({ tag: "payday-" + p.id, title: "💸 Payday!", body: "Your pay period is up — log your paycheck and set up the next budget." });
+    else if (dl <= 2) out.push({ tag: "ending-" + p.id, title: `⏳ ${dl} day${dl === 1 ? "" : "s"} left`, body: `Pay period ends soon — ${fmt(totalBudgeted(p) - totalSpent(p))} left to spend.` });
+    p.categories.filter((c) => !c.fixed && !isSavingsCat(c) && Number(c.budgeted) > 0).forEach((c) => {
+      const cs = catSpent(p, c.id);
+      const pct = cs / c.budgeted;
+      if (pct >= 0.9 && cs <= c.budgeted + 0.005) out.push({ tag: `limit-${p.id}-${c.id}`, title: `👀 ${c.name} is almost gone`, body: `${fmt(c.budgeted - cs)} left in ${c.name} (${Math.round(pct * 100)}% used).` });
+    });
+    return out;
+  }
+  // Date-stamped reminders the SW can fire in the background (payday + ending soon).
+  function reminderSchedule(p) {
+    if (!p || periodKind(p) === "vacation" || p.closed) return [];
+    const end = periodEnd(p);
+    const soon = new Date(end);
+    soon.setDate(soon.getDate() - 2);
+    return [
+      { fireOn: dateToISO(soon), tag: "ending-" + p.id, title: "⏳ 2 days left", body: "Your pay period ends in 2 days — check what's left to spend." },
+      { fireOn: dateToISO(end), tag: "payday-" + p.id, title: "💸 Payday!", body: "Your pay period is up — log your paycheck and set up the next budget." },
+    ];
+  }
+
+  async function fireLiveReminders() {
+    if (!notifyOn()) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const fired = (await remGet("fired")) || {};
+      const today = todayISO();
+      let changed = false;
+      for (const r of remindersFor(activePayday())) {
+        if (fired[r.tag] !== today) {
+          reg.showNotification(r.title, { body: r.body, tag: r.tag, icon: "./icon-192.png", badge: "./icon-192.png" });
+          fired[r.tag] = today;
+          changed = true;
+        }
+      }
+      if (changed) await remSet("fired", fired);
+    } catch (e) {}
+  }
+
+  // Keep the background schedule + periodic-sync registration in step with the toggle.
+  async function syncReminderState() {
+    if (!notifySupported()) return;
+    if (notifyOn()) {
+      await remSet("schedule", reminderSchedule(activePayday()));
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && "periodicSync" in reg) {
+          const st = await navigator.permissions.query({ name: "periodic-background-sync" }).catch(() => ({ state: "denied" }));
+          if (st.state === "granted") await reg.periodicSync.register("yosan-reminders", { minInterval: 24 * 60 * 60 * 1000 });
+        }
+      } catch (e) {}
+    } else {
+      await remSet("schedule", []);
+    }
+  }
+
+  async function enableReminders() {
+    if (!notifySupported()) { showToast("Reminders aren't supported on this browser."); return false; }
+    let perm = Notification.permission;
+    if (perm === "default") { try { perm = await Notification.requestPermission(); } catch (e) {} }
+    if (perm !== "granted") { showToast("Allow notifications for Yosan in your browser to get reminders."); return false; }
+    state.notify = Object.assign({}, state.notify, { enabled: true });
+    save();
+    await syncReminderState();
+    fireLiveReminders();
+    return true;
+  }
+  function disableReminders() {
+    state.notify = Object.assign({}, state.notify, { enabled: false });
+    save();
+    syncReminderState();
+  }
+
+  function initReminders() {
+    if (!notifySupported()) return;
+    syncReminderState();
+    fireLiveReminders();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") fireLiveReminders();
+    });
+  }
+
   /* Boot */
   render();
   initCloud();
   maybeShowOnboarding();
   initSWUpdates();
+  initReminders();
 })();

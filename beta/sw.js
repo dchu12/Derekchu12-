@@ -1,6 +1,6 @@
 /* Payday Budget service worker — offline support + fresh updates.
  * Network-first: online always gets the latest; offline falls back to cache. */
-const CACHE = "payday-beta-v123";
+const CACHE = "payday-beta-v124";
 const CORE = ["./", "./index.html", "./styles.css", "./app.js", "./cloud.js", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -38,5 +38,62 @@ self.addEventListener("fetch", (e) => {
       .catch(() =>
         caches.match(req).then((r) => r || (req.mode === "navigate" ? caches.match("./index.html") : undefined))
       )
+  );
+});
+
+/* ---- Reminders (Path A background firing) -------------------------------- *
+ * The page writes a date-stamped schedule to IndexedDB (it can't schedule a
+ * future notification directly). Periodic Background Sync (Android/Chrome,
+ * installed PWA, best-effort ~daily) wakes us to fire anything now due. */
+function remIdb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("yosan-reminders", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("kv");
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function remGet(key) {
+  return remIdb().then((db) => new Promise((res) => {
+    const q = db.transaction("kv", "readonly").objectStore("kv").get(key);
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => res(undefined);
+  })).catch(() => undefined);
+}
+function remSet(key, val) {
+  return remIdb().then((db) => new Promise((res) => {
+    const q = db.transaction("kv", "readwrite").objectStore("kv").put(val, key);
+    q.onsuccess = () => res();
+    q.onerror = () => res();
+  })).catch(() => {});
+}
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+async function runDueReminders() {
+  const schedule = (await remGet("schedule")) || [];
+  const fired = (await remGet("fired")) || {};
+  const t = todayLocal();
+  let changed = false;
+  for (const r of schedule) {
+    if (r.fireOn <= t && fired[r.tag] !== t) {
+      await self.registration.showNotification(r.title, { body: r.body, tag: r.tag, icon: "./icon-192.png", badge: "./icon-192.png" });
+      fired[r.tag] = t;
+      changed = true;
+    }
+  }
+  if (changed) await remSet("fired", fired);
+}
+self.addEventListener("periodicsync", (e) => {
+  if (e.tag === "yosan-reminders") e.waitUntil(runDueReminders());
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((cs) => {
+      for (const c of cs) if ("focus" in c) return c.focus();
+      if (self.clients.openWindow) return self.clients.openWindow("./");
+    })
   );
 });
