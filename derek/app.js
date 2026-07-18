@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "128";
+  const APP_VERSION = "129";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -3959,15 +3959,16 @@
    * only (name + left/spent/saved); categories/transactions never leave here.
    * ------------------------------------------------------------------ */
   const INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous 0/O/1/I/L
+  const INVITE_LEN = 8;
   function genInviteCode() {
     let s = "";
-    for (let i = 0; i < 6; i++) s += INVITE_ALPHABET[Math.floor(Math.random() * INVITE_ALPHABET.length)];
+    for (let i = 0; i < INVITE_LEN; i++) s += INVITE_ALPHABET[Math.floor(Math.random() * INVITE_ALPHABET.length)];
     return s;
   }
   function parseJoinCode() {
     try {
       const c = new URL(location.href).searchParams.get("join");
-      return c ? String(c).trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6) : null;
+      return c ? String(c).trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, INVITE_LEN) : null;
     } catch (e) { return null; }
   }
   function mySummary() {
@@ -4048,7 +4049,7 @@
         <p class="sub">Pair with your partner for a combined "left to spend" — <b>summaries only</b>, never your categories or transactions.</p>
         <button class="btn btn-primary btn-block" id="hh-create">Create a household</button>
         <div class="section-label set-sec">Have a code?</div>
-        <div class="field"><input id="hh-code" placeholder="6-character code" maxlength="6" autocapitalize="characters" value="${esc(pendingJoinCode || "")}" style="text-transform:uppercase;letter-spacing:2px;" /></div>
+        <div class="field"><input id="hh-code" placeholder="8-character code" maxlength="8" autocapitalize="characters" value="${esc(pendingJoinCode || "")}" style="text-transform:uppercase;letter-spacing:2px;" /></div>
         <button class="btn btn-ghost btn-block" id="hh-join">Join with code</button>`;
     }
     const me = cloudUser.uid;

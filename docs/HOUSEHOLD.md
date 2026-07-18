@@ -5,7 +5,7 @@ person's left / spent / saved. **Summaries only** — categories and transaction
 never leave the device. This is the generic version for new couples; Kelly &
 Derek keep their built-in Results comparison too.
 
-**What's in this slice:** create a household · join by 6-char code (or `?join=`
+**What's in this slice:** create a household · join by 8-char code (or `?join=`
 link) · together view · leave. **Not yet:** admin rename / remove-a-member UI,
 and public sign-up (brand-new accounts) — those are the second pass.
 
@@ -30,7 +30,7 @@ Do this with **Derek on his phone** and **Kelly on hers** (each signed into thei
 own account), after the rules are published and both apps show **Version ≥ 125**.
 
 1. **Derek → create.** Settings → **👫 Household** → **Create a household**.
-   - A **6-character code** appears, and a "Together, left to spend" card showing
+   - An **8-character code** appears, and a "Together, left to spend" card showing
      just Derek's numbers so far.
 2. **Share the code.** Tap **Share invite link** (or just read Derek the code).
 3. **Kelly → join.** On Kelly's phone: Settings → **👫 Household** → type the code

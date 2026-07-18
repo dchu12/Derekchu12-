@@ -13,7 +13,7 @@ source — edit `src/app.js`, run `npm run build`; see the README):
 **Needs a Firebase console visit by Derek — do these together to save a trip:**
 1. **Publish `firestore.rules`** — the roles + per-user access rules are written and committed but NOT live until published (Firestore Database → Rules → paste → Publish). See `docs/ADMIN.md`. Right after publishing: (a) confirm Kelly's exact account-email casing matches `isKelly()`, and (b) log a spend on Kelly's device to confirm sync still works.
 2. ~~**#3 Push notifications**~~ → shipped as **Path A local reminders** (v124): opt-in in Settings, fires payday / "period ending soon" / near-a-limit notifications. Foreground on all platforms (incl. Kelly's iPhone when the app is open); best-effort **background on Android** via Periodic Background Sync when the app is added to the Home screen. No backend, no cost. **Path B** (true scheduled push that wakes a closed phone, incl. iOS) still needs Firebase Blaze + a Cloud Function — left for later since we're not paying.
-3. **#4 Household linking** — **core slice shipped** (v125): create a household, join by 6-char code / `?join=` link, combined "together" view, leave. Needs Derek to **re-publish `firestore.rules`** (now includes household rules); **sign-up not needed** for the Kelly/Derek test. See `docs/HOUSEHOLD.md` for the 2-device test script. Second pass: admin rename/remove UI + public sign-up.
+3. **#4 Household linking** — **core slice shipped** (v125): create a household, join by 8-char code / `?join=` link, combined "together" view, leave. Needs Derek to **re-publish `firestore.rules`** (now includes household rules); **sign-up not needed** for the Kelly/Derek test. See `docs/HOUSEHOLD.md` for the 2-device test script. Second pass: admin rename/remove UI + public sign-up.
 
 **App-side follow-ups (no console needed, do anytime):**
 4. ✅ **Savings counts as saved, not spent** (v123) — `periodConsumed` excludes savings transfers; `periodSaved = income − consumed`, applied across History/Results/save-rate/recap/report. Dashboard budget-execution unchanged.
@@ -39,7 +39,7 @@ User decisions:
 - **Optional sign-in**: app stays fully usable logged-out; signing in unlocks creating/joining a household. Goes in ALL apps incl. public Beta so real new users can form households.
 - **Two people per household** (a couple): admin + one partner.
 - **Summaries only**: members see each other's left-to-spend / spent / saved, NOT individual categories or transactions.
-- Invite = **shareable link + 6-char code**. **Admin** can invite, remove the member, rename the household; either person can leave.
+- Invite = **shareable link + 8-char code**. **Admin** can invite, remove the member, rename the household; either person can leave.
 
 Planned architecture (build additively so it can't break existing Kelly⇄Derek sync):
 - **Auth**: add sign-up + sign-in (email/password) as an optional unlock. (Today only sign-in exists; accounts were pre-made in the console.)
