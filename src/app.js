@@ -2302,7 +2302,7 @@
     return { amount, categoryId: best ? best.id : null, note };
   }
 
-  function openSpendModal(p, presetCatId, editTxn, afterSave) {
+  function openSpendModal(p, presetCatId, editTxn, afterSave, prefillQuick) {
     setCur(curOf(p));
     const cats = p.categories;
     const editing = !!editTxn;
@@ -2416,6 +2416,7 @@
           document.getElementById("sp-save").click();
         }
       });
+      if (prefillQuick) { quickEl.value = prefillQuick; applyQuick(); }
       setTimeout(() => { try { quickEl.focus(); } catch (e) {} }, 30);
     }
 
@@ -4848,6 +4849,26 @@
     });
   }
 
+  // Launched from a Home-screen "Quick add" shortcut (?action=add) or shared
+  // text (share_target → ?text=/?title=). Jump straight into logging spend,
+  // pre-filling the quick-add box with any shared text, then scrub the URL so a
+  // refresh doesn't re-trigger it.
+  function handleLaunchAction() {
+    let params;
+    try { params = new URL(location.href).searchParams; } catch (e) { return; }
+    const action = params.get("action");
+    const shared = (params.get("text") || params.get("title") || "").trim();
+    if (action !== "add" && !shared) return;
+    // Clean the URL (keep the path, drop the query) so it's a one-shot intent.
+    try { history.replaceState(null, "", location.pathname); } catch (e) {}
+    const open = () => {
+      const p = activePeriod();
+      if (p) openSpendModal(p, null, null, null, shared || undefined);
+      else showToast("Start a pay period first, then you can log spending.");
+    };
+    setTimeout(open, 250); // let the first render settle
+  }
+
   function initLock() {
     bioSupported().then((v) => { _bioAvail = v; });
     if (!lockEnabled()) return;
@@ -4869,6 +4890,7 @@
   maybeShowOnboarding();
   initSWUpdates();
   initReminders();
+  handleLaunchAction();
   // A friend shared a ?join=CODE link: nudge them to the Household screen.
   if (pendingJoinCode) setTimeout(() => showToast("You've been invited to a household — open Settings › Household.", "Open", () => (cloudUser ? openHouseholdModal() : openLogin(false))), 1200);
 })();
