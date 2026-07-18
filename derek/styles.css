@@ -468,6 +468,31 @@ input:focus, select:focus { outline: 2px solid var(--accent); border-color: var(
   .modal-overlay { align-items: center; }
   .modal { border-radius: 20px; margin: 0 16px; }
 }
+/* App lock (PIN keypad + lock screen) */
+#lock-root .lock-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg); color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
+}
+.lock-brand { font-family: "Manrope", "Inter", sans-serif; font-weight: 800; font-size: 34px; color: var(--accent); letter-spacing: -0.5px; }
+.lock-title { font-size: 15px; color: var(--text-dim); font-weight: 600; min-height: 20px; }
+.lock-title.lock-err { color: var(--danger); }
+.pin-dots { display: flex; gap: 16px; margin: 4px 0 6px; }
+.pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); background: transparent; transition: background .12s ease, transform .12s ease; }
+.pin-dot.on { background: var(--accent); transform: scale(1.05); }
+.pin-dots.shake { animation: pinShake .38s ease; }
+@keyframes pinShake { 10%,90%{transform:translateX(-2px)} 30%,70%{transform:translateX(5px)} 50%{transform:translateX(-6px)} }
+.pin-pad { display: grid; grid-template-columns: repeat(3, 64px); gap: 14px; justify-content: center; }
+.lock-modal .pin-pad { grid-template-columns: repeat(3, 64px); }
+.pin-key { height: 64px; border-radius: 50%; border: none; background: var(--surface-2); color: var(--text); font-size: 24px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); transition: transform .08s ease, background .12s ease; -webkit-tap-highlight-color: transparent; }
+.lock-modal .pin-key { height: 56px; font-size: 22px; }
+.pin-key:active { transform: scale(0.93); background: var(--accent-soft); }
+.pin-key-blank { background: transparent; box-shadow: none; pointer-events: none; }
+.lock-bio-btn { margin-top: 4px; }
+.lock-forgot { background: none; border: none; color: var(--text-dim); font-size: 13px; text-decoration: underline; cursor: pointer; padding: 8px; margin-top: 2px; }
+.lock-forgot:hover { color: var(--text); }
+.lock-modal .lock-pad-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 6px; }
 
 /* History */
 .hist-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border); cursor: pointer; }

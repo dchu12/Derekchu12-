@@ -3584,6 +3584,22 @@
           <div class="section-label set-sec">Household</div>
           <button class="btn btn-ghost btn-block" id="set-household">👫 ${householdId ? "Household — you + your partner" : "Link budgets with your partner"}</button>` : ""}
 
+          <div class="section-label set-sec">Security</div>
+          ${lockEnabled()
+            ? `<div class="vac-row">
+                 <div class="vac-copy">
+                   <div class="vac-title">🔒 App lock is on</div>
+                   <div class="vac-note">A PIN is required to open Yosan${lockRecord() && lockRecord().bioId ? ", with Face ID / fingerprint for a faster unlock" : ""}. It re-locks after a couple of minutes in the background.</div>
+                 </div>
+                 <button class="btn btn-ghost btn-xs" id="set-lock-off">Turn off</button>
+               </div>
+               <div class="field-row">
+                 <button class="btn btn-ghost btn-sm" id="set-lock-pin" style="flex:1;">Change PIN</button>
+                 ${_bioAvail ? `<button class="btn btn-ghost btn-sm" id="set-lock-bio" style="flex:1;">${lockRecord() && lockRecord().bioId ? "Turn off biometric" : "Enable biometric"}</button>` : ""}
+               </div>`
+            : `<button class="btn btn-ghost btn-block" id="set-lock-on">🔒 Set up app lock</button>
+               <p class="footer-note" style="margin:6px 0 0;">Require a PIN${_bioAvail ? " (or Face ID / fingerprint)" : ""} to open Yosan. Stored only on this device.</p>`}
+
           <div class="section-label set-sec">Appearance</div>
           <div class="chips theme-seg" id="theme-seg" role="group" aria-label="Theme">
             <button type="button" class="chip ${getTheme() === "auto" ? "active" : ""}" data-theme="auto">Auto</button>
@@ -3658,6 +3674,36 @@
 
     document.getElementById("set-export").addEventListener("click", exportData);
     document.getElementById("set-export-csv").addEventListener("click", exportAllCSV);
+
+    const lockOnBtn = document.getElementById("set-lock-on");
+    if (lockOnBtn) lockOnBtn.addEventListener("click", () => { close(); openLockSetup(); });
+    const lockOffBtn = document.getElementById("set-lock-off");
+    if (lockOffBtn) lockOffBtn.addEventListener("click", async () => {
+      if (await verifyPinModal("Enter your PIN to turn off the lock")) {
+        clearLock();
+        showToast("App lock turned off.");
+      }
+      openSettings();
+    });
+    const lockPinBtn = document.getElementById("set-lock-pin");
+    if (lockPinBtn) lockPinBtn.addEventListener("click", async () => {
+      if (await verifyPinModal("Enter your current PIN")) openLockSetup();
+      else openSettings();
+    });
+    const lockBioBtn = document.getElementById("set-lock-bio");
+    if (lockBioBtn) lockBioBtn.addEventListener("click", async () => {
+      const rec = lockRecord(); if (!rec) return;
+      if (rec.bioId) {
+        rec.bioId = null; saveLockRecord(rec); showToast("Biometric unlock turned off.");
+        openSettings();
+      } else {
+        try {
+          if (await bioRegister()) showToast("Biometric unlock enabled 👍");
+          else showToast("Couldn't enable biometric unlock.");
+        } catch (e) { showToast("Couldn't enable biometric unlock."); }
+        openSettings();
+      }
+    });
 
     const themeSeg = document.getElementById("theme-seg");
     if (themeSeg)
@@ -4570,8 +4616,253 @@
   }
   function setTheme(t) { try { localStorage.setItem(THEME_KEY, t); } catch (e) {} applyTheme(); }
 
+  /* ------------------------------------------------------------------ *
+   * App lock (device-local, not synced). A PIN gates opening the app;
+   * on supported platforms a platform authenticator (Face ID / finger-
+   * print, via WebAuthn) offers a faster unlock. The PIN is never stored
+   * in the clear — only a PBKDF2-SHA-256 hash + random salt live in
+   * localStorage. Nothing about the lock leaves the device.
+   * ------------------------------------------------------------------ */
+  const LOCK_KEY = "yosan-lock";
+  let _locked = false;
+  let _bioAvail = false;
+
+  function lockRecord() {
+    try { const r = JSON.parse(localStorage.getItem(LOCK_KEY) || "null"); return r && r.hash ? r : null; }
+    catch (e) { return null; }
+  }
+  function saveLockRecord(rec) { try { localStorage.setItem(LOCK_KEY, JSON.stringify(rec)); } catch (e) {} }
+  function clearLock() { try { localStorage.removeItem(LOCK_KEY); } catch (e) {} }
+  function lockEnabled() { return !!lockRecord(); }
+
+  function lockB64enc(bytes) { let s = ""; bytes.forEach((b) => (s += String.fromCharCode(b))); return btoa(s); }
+  function lockB64dec(str) { const bin = atob(str); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+  function randBytes(n) { const a = new Uint8Array(n); (crypto.getRandomValues ? crypto : window.crypto).getRandomValues(a); return a; }
+
+  async function hashPin(pin, saltB64) {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", enc.encode(pin), "PBKDF2", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt: lockB64dec(saltB64), iterations: 120000, hash: "SHA-256" },
+      key, 256
+    );
+    return lockB64enc(new Uint8Array(bits));
+  }
+
+  async function bioSupported() {
+    try {
+      return !!(window.PublicKeyCredential &&
+        (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()));
+    } catch (e) { return false; }
+  }
+  async function bioRegister() {
+    const rec = lockRecord(); if (!rec) return false;
+    const cred = await navigator.credentials.create({ publicKey: {
+      challenge: randBytes(32),
+      rp: { name: "Yosan", id: location.hostname },
+      user: { id: randBytes(16), name: "yosan-device", displayName: "Yosan" },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred" },
+      timeout: 60000, attestation: "none",
+    } });
+    if (!cred) return false;
+    rec.bioId = lockB64enc(new Uint8Array(cred.rawId));
+    saveLockRecord(rec);
+    return true;
+  }
+  async function bioUnlock() {
+    const rec = lockRecord(); if (!rec || !rec.bioId) return false;
+    const a = await navigator.credentials.get({ publicKey: {
+      challenge: randBytes(32),
+      allowCredentials: [{ type: "public-key", id: lockB64dec(rec.bioId) }],
+      userVerification: "required", timeout: 60000, rpId: location.hostname,
+    } });
+    return !!a;
+  }
+
+  // A numeric keypad with masked dots. onComplete(pin, reset) fires when `len`
+  // digits are entered; reset() clears the dots for another try. Returns a
+  // handle whose detach() unhooks the hardware-keyboard listener.
+  function keypadMarkup(len) {
+    const dots = Array.from({ length: len }, () => `<span class="pin-dot"></span>`).join("");
+    const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
+    const btns = keys.map((k) => (k === "" ? `<span class="pin-key pin-key-blank"></span>` : `<button type="button" class="pin-key" data-k="${k}" aria-label="${k === "⌫" ? "Delete" : k}">${k}</button>`)).join("");
+    return `<div class="pin-dots" aria-hidden="true">${dots}</div><div class="pin-pad">${btns}</div>`;
+  }
+  function wireKeypad(root, len, onComplete) {
+    let entry = "";
+    const paint = () => root.querySelectorAll(".pin-dot").forEach((d, i) => d.classList.toggle("on", i < entry.length));
+    function press(k) {
+      if (k === "⌫") entry = entry.slice(0, -1);
+      else if (entry.length < len) entry += k;
+      paint();
+      if (entry.length === len) {
+        const val = entry; entry = "";
+        setTimeout(() => onComplete(val, paint), 110);
+      }
+    }
+    root.querySelectorAll(".pin-key[data-k]").forEach((b) => b.addEventListener("click", () => press(b.dataset.k)));
+    const onKey = (e) => {
+      if (!document.body.contains(root)) return;
+      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); press(e.key); }
+      else if (e.key === "Backspace") { e.preventDefault(); press("⌫"); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return { detach: () => document.removeEventListener("keydown", onKey, true), reset: paint };
+  }
+
+  function lockNow() {
+    if (_locked || !lockEnabled()) return;
+    _locked = true;
+    const appEl = document.getElementById("app");
+    if (appEl) { appEl.setAttribute("aria-hidden", "true"); appEl.setAttribute("inert", ""); }
+    renderLockScreen();
+  }
+  function unlockDone() {
+    _locked = false;
+    const lr = document.getElementById("lock-root"); if (lr) lr.remove();
+    const appEl = document.getElementById("app");
+    if (appEl) { appEl.removeAttribute("aria-hidden"); appEl.removeAttribute("inert"); }
+  }
+  function renderLockScreen() {
+    const rec = lockRecord(); if (!rec) return;
+    let root = document.getElementById("lock-root");
+    if (!root) { root = document.createElement("div"); root.id = "lock-root"; document.body.appendChild(root); }
+    const showBio = !!rec.bioId;
+    root.innerHTML = `
+      <div class="lock-screen">
+        <div class="lock-brand">¥osan</div>
+        <div class="lock-title" id="lock-title">Enter your PIN</div>
+        <div class="lock-pad-wrap" id="lock-pad">${keypadMarkup(rec.len)}</div>
+        ${showBio ? `<button type="button" class="btn btn-ghost btn-sm lock-bio-btn" id="lock-bio">🔓 Use Face ID / fingerprint</button>` : ""}
+        <button type="button" class="lock-forgot" id="lock-forgot">Forgot PIN?</button>
+      </div>`;
+    const titleEl = root.querySelector("#lock-title");
+    const dotsEl = root.querySelector(".pin-dots");
+    const kp = wireKeypad(root.querySelector("#lock-pad"), rec.len, async (val, reset) => {
+      let ok = false;
+      try { ok = (await hashPin(val, rec.salt)) === rec.hash; } catch (e) {}
+      if (ok) { kp.detach(); unlockDone(); }
+      else {
+        titleEl.textContent = "Wrong PIN — try again";
+        titleEl.classList.add("lock-err");
+        if (dotsEl) { dotsEl.classList.add("shake"); setTimeout(() => dotsEl.classList.remove("shake"), 400); }
+        reset();
+      }
+    });
+    if (showBio) {
+      const tryBio = async () => { try { if (await bioUnlock()) { kp.detach(); unlockDone(); } } catch (e) {} };
+      root.querySelector("#lock-bio").addEventListener("click", tryBio);
+      setTimeout(tryBio, 350); // offer biometric immediately
+    }
+    root.querySelector("#lock-forgot").addEventListener("click", () => {
+      if (confirm("Forgot your PIN?\n\nThe only way back in is to erase all Yosan data on this device and start fresh. This can't be undone — any un-synced data will be lost.")) {
+        clearLock();
+        state = defaultState();
+        save();
+        unlockDone();
+        render();
+        showToast("Data erased. Starting fresh.");
+      }
+    });
+  }
+
+  // Verify the current PIN inside a modal (used before turning the lock off or
+  // changing it). Resolves true on the correct PIN, false on cancel.
+  function verifyPinModal(title) {
+    return new Promise((resolve) => {
+      const rec = lockRecord(); if (!rec) return resolve(false);
+      const { close, modal } = mountModal(`<div class="modal-overlay"><div class="modal lock-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+        <h2 id="vpin-title">${esc(title)}</h2>
+        <div class="lock-pad-wrap" id="vpin-pad">${keypadMarkup(rec.len)}</div>
+        <button class="btn btn-ghost btn-block btn-sm" id="vpin-cancel" style="margin-top:10px;">Cancel</button>
+      </div></div>`);
+      let done = false;
+      const kp = wireKeypad(document.getElementById("vpin-pad"), rec.len, async (val, reset) => {
+        let ok = false;
+        try { ok = (await hashPin(val, rec.salt)) === rec.hash; } catch (e) {}
+        if (ok) { done = true; kp.detach(); close(); resolve(true); }
+        else { modal.querySelector("#vpin-title").textContent = "Wrong PIN — try again"; reset(); }
+      });
+      document.getElementById("vpin-cancel").addEventListener("click", () => { if (!done) { kp.detach(); close(); resolve(false); } });
+    });
+  }
+
+  // Create (or change) the PIN, then optionally offer biometric.
+  function openLockSetup() {
+    const LEN = 4;
+    let first = "";
+    const { close } = mountModal(`<div class="modal-overlay"><div class="modal lock-modal" role="dialog" aria-modal="true" aria-label="Set up app lock">
+      <h2 id="ls-title">Create a PIN</h2>
+      <p class="sub" id="ls-sub">Pick a 4-digit PIN. You'll enter it to open Yosan. Stored only on this device — if you forget it, you'll have to erase and start over.</p>
+      <div class="lock-pad-wrap" id="ls-pad">${keypadMarkup(LEN)}</div>
+      <button class="btn btn-ghost btn-block btn-sm" id="ls-cancel" style="margin-top:10px;">Cancel</button>
+    </div></div>`);
+    const titleEl = document.getElementById("ls-title");
+    const subEl = document.getElementById("ls-sub");
+    const kp = wireKeypad(document.getElementById("ls-pad"), LEN, async (val, reset) => {
+      if (!first) {
+        first = val;
+        titleEl.textContent = "Confirm your PIN";
+        subEl.textContent = "Enter the same PIN again to confirm.";
+        reset();
+      } else if (val === first) {
+        kp.detach();
+        const salt = lockB64enc(randBytes(16));
+        let hash = "";
+        try { hash = await hashPin(val, salt); } catch (e) { close(); showToast("Couldn't set the lock on this device."); return; }
+        const prev = lockRecord();
+        saveLockRecord({ v: 1, salt, hash, len: LEN, bioId: prev ? prev.bioId || null : null });
+        close();
+        showToast("App lock is on 🔒");
+        if (_bioAvail && !(prev && prev.bioId)) offerBiometric(() => openSettings());
+        else openSettings();
+      } else {
+        first = "";
+        titleEl.textContent = "PINs didn't match";
+        subEl.textContent = "Let's try again — create your PIN.";
+        reset();
+      }
+    });
+    document.getElementById("ls-cancel").addEventListener("click", () => { kp.detach(); close(); });
+  }
+
+  function offerBiometric(done) {
+    const { close } = mountModal(`<div class="modal-overlay"><div class="modal lock-modal" role="dialog" aria-modal="true" aria-label="Enable biometric unlock">
+      <h2>Faster unlock?</h2>
+      <p class="sub">Use your device's Face ID / fingerprint to open Yosan, with your PIN as a backup.</p>
+      <div class="field-row" style="margin-top:14px;">
+        <button class="btn btn-ghost" id="bio-skip" style="flex:1;">Not now</button>
+        <button class="btn btn-primary" id="bio-yes" style="flex:2;">Enable</button>
+      </div>
+    </div></div>`);
+    const finish = () => { close(); if (done) done(); };
+    document.getElementById("bio-skip").addEventListener("click", finish);
+    document.getElementById("bio-yes").addEventListener("click", async () => {
+      try {
+        if (await bioRegister()) { close(); showToast("Biometric unlock enabled 👍"); if (done) done(); return; }
+      } catch (e) {}
+      close();
+      showToast("Couldn't enable biometric unlock.");
+      if (done) done();
+    });
+  }
+
+  function initLock() {
+    bioSupported().then((v) => { _bioAvail = v; });
+    if (!lockEnabled()) return;
+    lockNow();
+    let bgAt = 0;
+    const AUTOLOCK_MS = 2 * 60 * 1000; // re-lock if backgrounded for 2+ minutes
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") bgAt = Date.now();
+      else if (document.visibilityState === "visible" && lockEnabled() && !_locked && bgAt && Date.now() - bgAt > AUTOLOCK_MS) lockNow();
+    });
+  }
+
   /* Boot */
   applyTheme();
+  initLock();
   pendingJoinCode = parseJoinCode();
   render();
   initCloud();
