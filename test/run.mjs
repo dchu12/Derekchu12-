@@ -173,7 +173,7 @@ eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
 /* ---- household invite code format ------------------------------------ */
 {
   const codes = Array.from({ length: 50 }, () => T.genInviteCode());
-  ok(codes.every((c) => /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}$/.test(c)), "invite code: 6 unambiguous chars");
+  ok(codes.every((c) => /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/.test(c)), "invite code: 8 unambiguous chars");
 }
 
 /* ---- reminders (payday / ending-soon / near-limit + schedule) -------- */
