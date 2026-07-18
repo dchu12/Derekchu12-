@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "125";
+  const APP_VERSION = "126";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -3584,6 +3584,14 @@
           <div class="section-label set-sec">Household</div>
           <button class="btn btn-ghost btn-block" id="set-household">👫 ${householdId ? "Household — you + your partner" : "Link budgets with your partner"}</button>` : ""}
 
+          <div class="section-label set-sec">Appearance</div>
+          <div class="chips theme-seg" id="theme-seg" role="group" aria-label="Theme">
+            <button type="button" class="chip ${getTheme() === "auto" ? "active" : ""}" data-theme="auto">Auto</button>
+            <button type="button" class="chip ${getTheme() === "light" ? "active" : ""}" data-theme="light">☀️ Light</button>
+            <button type="button" class="chip ${getTheme() === "dark" ? "active" : ""}" data-theme="dark">🌙 Dark</button>
+          </div>
+          <p class="footer-note" style="margin:8px 0 0;">Auto follows your device's light/dark setting.</p>
+
           <div class="section-label set-sec">Your data</div>
           <div class="field-row">
             <button class="btn btn-primary" id="set-export" style="flex:1;">⬇️ Download</button>
@@ -3650,6 +3658,16 @@
 
     document.getElementById("set-export").addEventListener("click", exportData);
     document.getElementById("set-export-csv").addEventListener("click", exportAllCSV);
+
+    const themeSeg = document.getElementById("theme-seg");
+    if (themeSeg)
+      themeSeg.querySelectorAll("[data-theme]").forEach((b) => {
+        b.addEventListener("click", () => {
+          setTheme(b.dataset.theme);
+          themeSeg.querySelectorAll("[data-theme]").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+        });
+      });
 
     document.getElementById("set-import-file").addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
@@ -4541,7 +4559,19 @@
     });
   }
 
+  // Theme preference (device-level, not synced): "auto" (follow OS) | "light" | "dark".
+  const THEME_KEY = "yosan-theme";
+  function getTheme() { try { return localStorage.getItem(THEME_KEY) || "auto"; } catch (e) { return "auto"; } }
+  function applyTheme() {
+    const t = getTheme();
+    const el = document.documentElement;
+    if (t === "light" || t === "dark") el.setAttribute("data-theme", t);
+    else el.removeAttribute("data-theme"); // auto → let the OS media query decide
+  }
+  function setTheme(t) { try { localStorage.setItem(THEME_KEY, t); } catch (e) {} applyTheme(); }
+
   /* Boot */
+  applyTheme();
   pendingJoinCode = parseJoinCode();
   render();
   initCloud();
