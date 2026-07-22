@@ -22,7 +22,9 @@ source — edit `src/app.js`, run `npm run build`; see the README):
 7. **Reports IA — round three (optional)** — v122 added segmented Insights/History; v123 made saved-per-period a diverging zero-baseline chart + merged the total-saved card. Could still: collapsible cards, or a diverging save-rate chart too.
 8. **Single-source the styles too (optional)** — `styles.css`/`index.html`/`manifest.json` are still per-deployment (theme colors, tab set). Could tokenize the accent color + firebase/tab differences into the build like `app.js`.
 
-_Shipped since (v133): "Safe to spend today" (discretionary left ÷ days remaining) on the hero; faster logging — "🔁 Log again" recent-purchase chips + preset +$5/$10/$20/$50 amount buttons in the spend sheet; goal-hit celebration (fireworks + toast when a savings goal is fully funded)._
+_Shipped since (v134–v135): fixed "safe to spend today" overstating (now total left ÷ days); **auto-trim** — overspending a category proportionally shrinks the "left" shown on the still-under categories so they reconcile with the real left-to-spend (with a plain-language note), fixing the "Food says $114 but top says $65" confusion; hardened category math against string budgets._
+
+_Shipped earlier (v133): "Safe to spend today" (discretionary left ÷ days remaining) on the hero; faster logging — "🔁 Log again" recent-purchase chips + preset +$5/$10/$20/$50 amount buttons in the spend sheet; goal-hit celebration (fireworks + toast when a savings goal is fully funded)._
 
 _Shipped earlier (v131–v132): warmer, more playful coach voice (book quotes kept as the star); **Treat Fund** — coming in under your discretionary spending budget banks a share (default 50%) of the leftover as guilt-free "treat" money, shown on the dashboard and cash-in-able to a 🎁 Treat Yourself category next period; toggle + 25/50/100% rate in Settings; reframes saving as earning a reward._
 

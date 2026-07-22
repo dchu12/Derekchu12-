@@ -226,6 +226,40 @@ eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
   ok(T.safeToSpendPool(p2) <= (100 - 34.98) + 0.005, "safe pool <= left to spend (p2)");
 }
 
+/* ---- auto-trim: overspend shrinks other categories' shown "left" ----- */
+{
+  // Food 114.83 under, Shopping 111.94 over, Misc 62.13 over → over 174.07,
+  // under 114.83 → factor 0 (fully wiped: you've overspent more than is left
+  // in the under categories). Food's shown "left" trims toward 0.
+  const p = {
+    categories: [
+      { id: "food", name: "Food", budgeted: 500 },
+      { id: "shop", name: "Shopping", budgeted: 320 },
+      { id: "misc", name: "Misc", budgeted: 200 },
+      { id: "rent", name: "Rent", budgeted: 1200, fixed: true }, // ignored
+    ],
+    transactions: [
+      { categoryId: "food", amount: 385.17 },
+      { categoryId: "shop", amount: 431.94 },
+      { categoryId: "misc", amount: 262.13 },
+    ],
+  };
+  const t = T.discTrim(p);
+  eq(Math.round(t.over * 100) / 100, 174.07, "trim: total overspend across discretionary");
+  eq(Math.round(t.under * 100) / 100, 114.83, "trim: total still-under across discretionary");
+  eq(t.factor, 0, "trim factor 0 when overspend exceeds what's left under");
+  ok(t.active, "trim active when overspending");
+  // Mild overspend: Food 200 under, Shopping 50 over → factor 0.75; Food shows 150.
+  const p2 = { categories: [{ id: "f", name: "Food", budgeted: 500 }, { id: "s", name: "Shop", budgeted: 100 }],
+    transactions: [{ categoryId: "f", amount: 300 }, { categoryId: "s", amount: 150 }] };
+  const t2 = T.discTrim(p2);
+  eq(t2.factor, 0.75, "trim factor = 1 - over/under (50/200)");
+  eq(Math.round(200 * t2.factor), 150, "Food's $200 left trims to $150");
+  // No overspend → factor 1, inactive.
+  const p3 = { categories: [{ id: "f", name: "Food", budgeted: 500 }], transactions: [{ categoryId: "f", amount: 100 }] };
+  ok(!T.discTrim(p3).active && T.discTrim(p3).factor === 1, "no trim when nothing overspent");
+}
+
 /* ---- household invite code format ------------------------------------ */
 {
   const codes = Array.from({ length: 50 }, () => T.genInviteCode());

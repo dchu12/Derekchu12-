@@ -993,3 +993,7 @@ textarea:focus-visible,
 .sp-presets { margin-top: 8px; }
 .sp-presets .chip { font-weight: 700; }
 .sp-recent-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Auto-trim: category "left" reduced because of overspending elsewhere */
+.cat-left.trimmed b { color: var(--warn); }
+.trim-note { font-size: 12.5px; color: var(--text-dim); background: var(--surface-2); border-radius: 10px; padding: 9px 11px; margin-bottom: 12px; line-height: 1.45; }
+.trim-note b { color: var(--warn); font-weight: 700; }
