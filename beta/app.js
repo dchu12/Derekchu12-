@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "131";
+  const APP_VERSION = "132";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -34,6 +34,10 @@
     vacationMode: false,  // when on, a vacation budget can run alongside the pay period
     activeBudget: "payday", // which budget the top switcher is showing: "payday" | "vacation"
     view: "dashboard",
+    // Treat Fund: coming in under your spending budget earns guilt-free "treat"
+    // money to spend next period. balance/earned/spent in dollars; rate is the
+    // share of under-budget money banked (0.5 = every $100 under → $50).
+    treat: { balance: 0, earnedTotal: 0, spentTotal: 0, rate: 0.5, enabled: true },
   });
 
   /* Default categories offered when planning a vacation budget. */
@@ -57,6 +61,15 @@
     }
     delete s.goal;
     if (!Array.isArray(s.goals)) s.goals = [];
+    // Treat Fund (added later) — backfill and coerce numeric fields.
+    if (!s.treat || typeof s.treat !== "object") s.treat = { balance: 0, earnedTotal: 0, spentTotal: 0, rate: 0.5, enabled: true };
+    else {
+      s.treat.balance = Number(s.treat.balance) || 0;
+      s.treat.earnedTotal = Number(s.treat.earnedTotal) || 0;
+      s.treat.spentTotal = Number(s.treat.spentTotal) || 0;
+      if (typeof s.treat.rate !== "number" || !(s.treat.rate > 0)) s.treat.rate = 0.5;
+      if (typeof s.treat.enabled !== "boolean") s.treat.enabled = true;
+    }
     return s;
   }
 
@@ -391,6 +404,27 @@
   // on purpose — funding it fully is a win, not overspending, so the coach never scolds it.
   function isSavingsCat(c) {
     return /sav(e|ing)|emergency|nest\s*egg|rainy\s*day|invest/i.test(c.name || "");
+  }
+
+  /* Treat Fund ------------------------------------------------------------ *
+   * "Under budget" = money left in the discretionary spending budget at
+   * period end (budgeted − spent), summed across normal spend categories.
+   * Fixed bills, savings transfers, and cashed-in treat categories are
+   * excluded — the last so unspent treat money can't re-earn treats. */
+  function underBudgetAmount(p) {
+    let base = 0;
+    for (const c of p.categories) {
+      if (c.fixed || c.treat || isSavingsCat(c) || !(Number(c.budgeted) > 0)) continue;
+      base += Number(c.budgeted) - catSpent(p, c.id);
+    }
+    return base;
+  }
+  const treatRate = () => (state.treat && state.treat.rate > 0 ? state.treat.rate : 0.5);
+  // Reward banked when a period closes (rounded to cents; 0 if over budget).
+  function treatEarnedFor(p) {
+    const base = underBudgetAmount(p);
+    if (!(base > 0.005)) return 0;
+    return Math.round(base * treatRate() * 100) / 100;
   }
 
   // Set of category ids currently spent over their (non-zero) budget.
@@ -1357,6 +1391,72 @@
     requestAnimationFrame(step);
   }
 
+  // Dashboard card for the Treat Fund — shown only once there's a balance.
+  function treatCard() {
+    const t = state.treat;
+    if (!t || !t.enabled || !(t.balance > 0.005)) return "";
+    return `<button type="button" class="card treat-card" id="treat-open" aria-label="Open your Treat Fund">
+      <span class="treat-emoji" aria-hidden="true">🎁</span>
+      <span class="treat-body">
+        <span class="treat-title">Treat Fund <span class="treat-amt">${fmt(t.balance)}</span></span>
+        <span class="treat-sub">Guilt-free fun money you earned by coming in under budget — tap to spend it.</span>
+      </span>
+      <span class="treat-chevron" aria-hidden="true">›</span>
+    </button>`;
+  }
+
+  function openTreatModal() {
+    const t = state.treat || {};
+    const pct = Math.round(treatRate() * 100);
+    const { close } = mountModal(`
+      <div class="modal-overlay">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Treat Fund">
+          <div class="treat-head" aria-hidden="true">🎁</div>
+          <h2 style="text-align:center;">Treat Fund</h2>
+          <p class="sub" style="text-align:center;">Every time you come in under your spending budget, <b>${pct}%</b> of it becomes guilt-free fun money for next period. You earned it.</p>
+          <div class="treat-balance">${fmt(t.balance || 0)}<span>ready to spend</span></div>
+          <div class="stat-grid" style="margin:14px 0 4px;">
+            <div class="sstat"><div class="sk">Earned</div><div class="sv">${fmt(t.earnedTotal || 0)}</div></div>
+            <div class="sstat"><div class="sk">Spent</div><div class="sv">${fmt(t.spentTotal || 0)}</div></div>
+            <div class="sstat"><div class="sk">Match</div><div class="sv">${pct}%</div></div>
+          </div>
+          ${t.balance > 0.005 ? `
+          <div class="section-label set-sec">Cash in</div>
+          <p class="sub" style="margin-bottom:8px;">Add some (or all) of it to a <b>🎁 Treat Yourself</b> category in your current budget — then spend it however you like.</p>
+          <div class="field money-input">
+            <label for="treat-amt-in">Amount to add</label>
+            <input id="treat-amt-in" type="number" inputmode="decimal" step="0.01" min="0" max="${(t.balance || 0).toFixed(2)}" value="${(t.balance || 0).toFixed(2)}" />
+          </div>
+          <button class="btn btn-primary btn-block" id="treat-cash">🎁 Add to my budget</button>
+          ` : `<p class="sub" style="text-align:center;margin-top:12px;">Nothing to spend yet — come in under budget this period and your first treat lands when you close it.</p>`}
+          <button class="btn btn-ghost btn-block" id="treat-close" style="margin-top:16px;">Close</button>
+        </div>
+      </div>
+    `);
+    applyCurSymbol(modalRoot);
+    document.getElementById("treat-close").addEventListener("click", close);
+    const cashBtn = document.getElementById("treat-cash");
+    if (cashBtn) cashBtn.addEventListener("click", () => {
+      const inEl = document.getElementById("treat-amt-in");
+      let amt = Math.round((Number(inEl.value) || 0) * 100) / 100;
+      if (!(amt > 0)) { showFieldError(inEl, "Enter an amount greater than zero."); return; }
+      if (amt > state.treat.balance + 0.005) amt = Math.round(state.treat.balance * 100) / 100;
+      const target = activePayday();
+      if (!target) { showToast("Start a pay period first, then you can spend your treats."); return; }
+      let cat = target.categories.find((c) => c.treat);
+      if (cat) cat.budgeted = String(Math.round((Number(cat.budgeted || 0) + amt) * 100) / 100);
+      else target.categories.push({ id: uid(), emoji: "🎁", name: "Treat Yourself", budgeted: String(amt), treat: true });
+      state.treat.balance = Math.round((state.treat.balance - amt) * 100) / 100;
+      state.treat.spentTotal = Math.round((state.treat.spentTotal + amt) * 100) / 100;
+      save();
+      close();
+      if (state.activeBudget !== "payday") state.activeBudget = "payday";
+      render();
+      fireConfetti({ count: 80 }); haptic(18);
+      showToast(`🎁 ${fmt(amt)} added to “Treat Yourself” — enjoy it!`);
+    });
+  }
+
   function renderDashboard(p) {
     setCur(curOf(p));
     const isVac = periodKind(p) === "vacation";
@@ -1483,6 +1583,8 @@
 
       <div class="coach coach-${coach.tone}">${esc(coach.text)}</div>
 
+      ${treatCard()}
+
       ${safetyBanner}
 
       <div class="card">
@@ -1515,6 +1617,8 @@
     document.getElementById("manage-cats").addEventListener("click", () => openManageCategories(p));
     const catLog = document.getElementById("cat-log-spend");
     if (catLog) catLog.addEventListener("click", () => openSpendModal(p));
+    const treatBtn = document.getElementById("treat-open");
+    if (treatBtn) treatBtn.addEventListener("click", openTreatModal);
     const statIncome = document.getElementById("stat-income");
     if (statIncome) statIncome.addEventListener("click", () => openIncomeManager(p));
     document.getElementById("new-payday").addEventListener("click", () => (isVac ? confirmEndVacation(p) : confirmNewPayday(p)));
@@ -2563,11 +2667,25 @@
     document.getElementById("np-go").addEventListener("click", () => {
       p.closed = true;
       p.closedAt = new Date().toISOString();
+      // Bank treat money for coming in under the spending budget.
+      let earned = 0, base = 0;
+      if (state.treat && state.treat.enabled && !p.treatRewarded) {
+        base = underBudgetAmount(p);
+        earned = treatEarnedFor(p);
+        if (earned > 0) {
+          state.treat.balance = Math.round((state.treat.balance + earned) * 100) / 100;
+          state.treat.earnedTotal = Math.round((state.treat.earnedTotal + earned) * 100) / 100;
+          p.treatRewarded = true;
+          p.treatEarned = earned;
+        }
+      }
       save();
       close();
       render(); // no active period -> setup flow appears
       openRecapCard(p); // celebrate the period that just wrapped
       celebrateBig(); // fireworks + confetti over the recap
+      if (earned > 0)
+        setTimeout(() => showToast(`🎁 ${fmt(base)} under budget — ${fmt(earned)} added to your Treat Fund!`), 900);
     });
   }
 
@@ -3606,6 +3724,25 @@
             </label>
           </div>` : ""}
 
+          <div class="section-label set-sec">🎁 Savings rewards</div>
+          <div class="vac-row">
+            <div class="vac-copy">
+              <div class="vac-title">Treat Fund</div>
+              <div class="vac-note">Come in under your spending budget and earn guilt-free "treat" money to spend next period. Lifetime earned: <b>${fmt((state.treat && state.treat.earnedTotal) || 0)}</b>.</div>
+            </div>
+            <label class="switch" title="Toggle Treat Fund">
+              <input type="checkbox" id="set-treat" ${state.treat && state.treat.enabled ? "checked" : ""} />
+              <span class="switch-track" aria-hidden="true"></span>
+            </label>
+          </div>
+          ${state.treat && state.treat.enabled ? `
+          <p class="sub" style="margin:2px 0 6px;">How much of your under-budget money becomes treats:</p>
+          <div class="chips theme-seg" id="treat-rate" role="group" aria-label="Treat match rate">
+            <button type="button" class="chip ${treatRate() === 0.25 ? "active" : ""}" data-rate="0.25">25%</button>
+            <button type="button" class="chip ${treatRate() === 0.5 ? "active" : ""}" data-rate="0.5">50%</button>
+            <button type="button" class="chip ${treatRate() === 1 ? "active" : ""}" data-rate="1">100%</button>
+          </div>` : ""}
+
           ${cloudOn() && cloudUser ? `
           <div class="section-label set-sec">Household</div>
           <button class="btn btn-ghost btn-block" id="set-household">👫 ${householdId ? "Household — you + your partner" : "Link budgets with your partner"}</button>` : ""}
@@ -3730,6 +3867,24 @@
         openSettings();
       }
     });
+
+    const treatToggle = document.getElementById("set-treat");
+    if (treatToggle) treatToggle.addEventListener("change", (e) => {
+      state.treat.enabled = e.target.checked;
+      save();
+      close();
+      openSettings();
+    });
+    const treatRateSeg = document.getElementById("treat-rate");
+    if (treatRateSeg)
+      treatRateSeg.querySelectorAll("[data-rate]").forEach((b) => {
+        b.addEventListener("click", () => {
+          state.treat.rate = Number(b.dataset.rate) || 0.5;
+          save();
+          treatRateSeg.querySelectorAll("[data-rate]").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+        });
+      });
 
     const themeSeg = document.getElementById("theme-seg");
     if (themeSeg)
@@ -4475,6 +4630,7 @@
         parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
         mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
         transactionsCSV, saveRateSeries, periodConsumed, periodSaved, remindersFor, reminderSchedule, genInviteCode,
+        underBudgetAmount, treatEarnedFor,
         setState: (s) => { state = s; },
         getState: () => state,
       };
