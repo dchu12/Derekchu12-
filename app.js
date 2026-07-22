@@ -10,7 +10,7 @@
   const REPORT_EMAILS = ["Kellyseadreams@gmail.com", "derekchu12@gmail.com"];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "133";
+  const APP_VERSION = "134";
 
   /* Which shared budget this app instance owns in the cloud (Firebase).
    * Kelly's app owns "kelly"; Derek's app owns "derek". */
@@ -425,6 +425,16 @@
     const base = underBudgetAmount(p);
     if (!(base > 0.005)) return 0;
     return Math.round(base * treatRate() * 100) / 100;
+  }
+
+  /* "Safe to spend today" — the total left to spend, spread evenly over the days
+   * remaining until payday. Uses the same "left to spend" figure as the hero
+   * (budgeted − spent, netting any overspending), so it can never exceed it. */
+  function safeToSpendPool(p) {
+    return Math.max(0, totalBudgeted(p) - totalSpent(p));
+  }
+  function safeToSpendToday(p) {
+    return safeToSpendPool(p) / Math.max(1, daysLeft(p));
   }
 
   // Set of category ids currently spent over their (non-zero) budget.
@@ -1468,13 +1478,10 @@
     const saved = periodIncome(p) - spent; // money kept so far (income minus spent) — matches History/Results
     const dl = daysLeft(p);
     const coach = coachMessage(p);
-    // "Safe to spend today": discretionary money still left, spread over the days
-    // remaining. A calm, no-math number so she knows what's okay to spend now.
-    const discLeft = p.categories
-      .filter((c) => !c.fixed && !isSavingsCat(c))
-      .reduce((s, c) => s + Math.max(0, Number(c.budgeted) - catSpent(p, c.id)), 0);
-    const safeToday = discLeft / Math.max(1, dl);
-    const showSafe = dl > 0 && discLeft > 0.005;
+    // "Safe to spend today": what's left to spend, spread over the days remaining.
+    // A calm, no-math number so she knows what's okay to spend right now.
+    const safeToday = safeToSpendToday(p);
+    const showSafe = dl > 0 && safeToSpendPool(p) > 0.005;
     // Budget-used ring for the hero card.
     const pctSpent = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
     const ringC = 2 * Math.PI * 43;
@@ -4710,7 +4717,7 @@
         parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
         mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
         transactionsCSV, saveRateSeries, periodConsumed, periodSaved, remindersFor, reminderSchedule, genInviteCode,
-        underBudgetAmount, treatEarnedFor,
+        underBudgetAmount, treatEarnedFor, safeToSpendPool, safeToSpendToday,
         setState: (s) => { state = s; },
         getState: () => state,
       };
