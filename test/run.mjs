@@ -200,6 +200,32 @@ eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
   eq(T.treatEarnedFor(over), 0, "no treat when overspent (base negative)");
 }
 
+/* ---- safe to spend today never exceeds left to spend ----------------- */
+{
+  // Shopping overspent by 111.94; a naive per-category clamp would inflate the
+  // number above what's actually left. Left to spend = 500+320 - (385.17+431.94)
+  // = 2.89; over 1 day-left that's the whole thing, never more.
+  const p = {
+    startDate: "2026-07-01", frequency: "biweekly", paycheckAmount: 2600, extraIncome: [],
+    categories: [
+      { id: "food", name: "Food", budgeted: 500 },
+      { id: "shop", name: "Shopping", budgeted: 320 },
+    ],
+    transactions: [
+      { categoryId: "food", amount: 385.17 },
+      { categoryId: "shop", amount: 431.94 }, // over by 111.94
+    ],
+  };
+  const left = 820 - 817.11; // 2.89
+  eq(Math.round(T.safeToSpendPool(p) * 100) / 100, 2.89, "safe pool = left to spend, nets overspend (not clamped per-cat)");
+  ok(T.safeToSpendPool(p) <= left + 0.005, "safe pool never exceeds left to spend");
+  // 65.02 left over 3 days = 21.67/day (the reported case)
+  const p2 = { startDate: "2026-07-01", frequency: "biweekly", paycheckAmount: 2600, extraIncome: [],
+    categories: [{ id: "a", name: "A", budgeted: 100 }], transactions: [{ categoryId: "a", amount: 34.98 }] };
+  eq(Math.round((65.02 / 3) * 100) / 100, 21.67, "65.02 left / 3 days = 21.67 (sanity)");
+  ok(T.safeToSpendPool(p2) <= (100 - 34.98) + 0.005, "safe pool <= left to spend (p2)");
+}
+
 /* ---- household invite code format ------------------------------------ */
 {
   const codes = Array.from({ length: 50 }, () => T.genInviteCode());
