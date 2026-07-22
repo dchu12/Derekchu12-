@@ -11,7 +11,7 @@
   const REPORT_EMAILS = [];
 
   /* Bump on each release so you can confirm the live version in Settings. */
-  const APP_VERSION = "134";
+  const APP_VERSION = "135";
 
   /* Beta build is local-only (no Firebase sign-in), so these are inert. */
   const BUDGET_KEY = "beta";
@@ -435,6 +435,21 @@
   }
   function safeToSpendToday(p) {
     return safeToSpendPool(p) / Math.max(1, daysLeft(p));
+  }
+
+  /* Auto-trim factor for discretionary categories: overspending in one shrinks
+   * the "left" shown on the still-under ones so they reconcile with the real
+   * money left. Returns { over, under, factor (0..1), active }. */
+  function discTrim(p) {
+    let over = 0, under = 0;
+    for (const c of p.categories) {
+      if (c.fixed || isSavingsCat(c) || !(Number(c.budgeted) > 0)) continue;
+      const cl = Number(c.budgeted) - catSpent(p, c.id);
+      if (cl < -0.005) over += -cl;
+      else if (cl > 0) under += cl;
+    }
+    const factor = under > 0 ? Math.max(0, 1 - over / under) : 1;
+    return { over, under, factor, active: over > 0.005 && factor < 0.999 };
   }
 
   // Set of category ids currently spent over their (non-zero) budget.
@@ -1485,19 +1500,36 @@
     const ringC = 2 * Math.PI * 43;
     const ringDash = (Math.min(100, Math.max(0, pctSpent)) / 100) * ringC;
 
+    // Auto-trim: overspending in a discretionary category eats into what's
+    // really left in the others. We shrink the "left" shown on the still-under
+    // categories proportionally so they reconcile with the true left-to-spend
+    // (Kelly's confusion: Food showed $114 left while only $65 was left overall).
+    const _trim = discTrim(p);
+    const trimFactor = _trim.factor;
+    const trimActive = _trim.active;
+    const overNames = p.categories
+      .filter((c) => !c.fixed && !isSavingsCat(c) && Number(c.budgeted) > 0 && catSpent(p, c.id) > Number(c.budgeted) + 0.005)
+      .map((c) => c.name);
+
     const renderCat = (c) => {
       const cs = catSpent(p, c.id);
+      const bud = Number(c.budgeted) || 0; // may arrive as a string (e.g. treat cats)
       const isSav = isSavingsCat(c);
-      const pct = c.budgeted > 0 ? (cs / c.budgeted) * 100 : 0;
+      const pct = bud > 0 ? (cs / bud) * 100 : 0;
       // Savings/goal categories are money set aside on purpose — funding them is a
       // win, never "over budget" and never a warning.
-      const over = !isSav && cs > c.budgeted + 0.005;
-      const funded = isSav && cs >= c.budgeted - 0.005;
+      const over = !isSav && cs > bud + 0.005;
+      const funded = isSav && cs >= bud - 0.005;
       const cls = isSav ? "good" : over ? "over" : c.fixed ? "ok" : pct > 85 ? "warn" : "ok";
-      const pctLabel = c.budgeted > 0 ? Math.round(pct) + "%" : "—";
+      const pctLabel = bud > 0 ? Math.round(pct) + "%" : "—";
+      // Discretionary categories that are still under get their "left" trimmed.
+      const isDisc = !c.fixed && !isSav;
+      const rawLeft = bud - cs;
+      const trimmed = isDisc && !over && trimActive && rawLeft > 0.005;
+      const shownLeft = trimmed ? rawLeft * trimFactor : rawLeft;
       const remainAmt = isSav
-        ? (funded ? fmt(cs) : fmt(c.budgeted - cs))
-        : (over ? fmt(cs - c.budgeted) : fmt(c.budgeted - cs));
+        ? (funded ? fmt(cs) : fmt(bud - cs))
+        : (over ? fmt(cs - bud) : fmt(shownLeft));
       const remainLabel = isSav ? (funded ? "saved" : "to go") : (over ? "over" : "left");
       const fixedTag = c.fixed ? `<span class="cat-fixed" title="Fixed bill" aria-label="Fixed bill"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10.5" width="16" height="9.5" rx="2.5"></rect><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"></path></svg></span>` : "";
       return `
@@ -1511,7 +1543,7 @@
             </span>
             <span class="cat-line cat-sub">
               <span class="cat-spent"><b>${fmt(cs)}</b> of ${fmt(c.budgeted)}</span>
-              <span class="cat-left ${over ? "over" : ""}${isSav ? " saved" : ""}"><b>${remainAmt}</b> <span class="cat-left-label">${remainLabel}</span></span>
+              <span class="cat-left ${over ? "over" : ""}${isSav ? " saved" : ""}${trimmed ? " trimmed" : ""}"${trimmed ? ` title="Trimmed from ${esc(fmt(rawLeft))} because you're over budget elsewhere"` : ""}><b>${remainAmt}</b> <span class="cat-left-label">${trimmed ? "left ↓" : remainLabel}</span></span>
             </span>
             <span class="bar"><span class="bar-fill ${cls}" style="width:${Math.min(100, pct)}%"></span></span>
           </span>
@@ -1610,6 +1642,7 @@
             <button class="icon-btn" id="manage-cats" aria-label="Manage categories" title="Manage categories"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.4" fill="var(--surface-2)"/><circle cx="15" cy="12" r="2.4" fill="var(--surface-2)"/><circle cx="8" cy="17" r="2.4" fill="var(--surface-2)"/></svg></button>
           </div>
         </div>
+        ${trimActive ? `<div class="trim-note">↓ You're over budget in <b>${esc(overNames.join(" & "))}</b>, so the “left” on your other categories is trimmed to reflect the money that's really left.</div>` : ""}
         ${cats}
       </div>
 
@@ -4712,7 +4745,7 @@
         parseQuickAdd, daysLeft, periodEnd, frequencyDays, parseDate, dateToISO,
         mergeTransactions, mergePeriods, computeResults, migrateState, defaultState, fmt,
         transactionsCSV, saveRateSeries, periodConsumed, periodSaved, remindersFor, reminderSchedule, genInviteCode,
-        underBudgetAmount, treatEarnedFor, safeToSpendPool, safeToSpendToday,
+        underBudgetAmount, treatEarnedFor, safeToSpendPool, safeToSpendToday, discTrim,
         setState: (s) => { state = s; },
         getState: () => state,
       };
