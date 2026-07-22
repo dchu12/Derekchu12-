@@ -447,6 +447,9 @@
         `🍦 Over a bit on ${names}. Enjoy it — ease off a little and you'll balance out by payday.`,
         `🌿 ${names} ran over slightly. Budgets are guides, not cages — you're still doing great.`,
         `☕ Slightly over on ${names}. It happens to everyone — just glide the rest of the period.`,
+        `🙈 A wee splurge on ${names} — we don't do guilt here. You're still totally on track.`,
+        `🎈 ${names} floated a bit over. No biggie — life's for living. Ease up and you'll balance out.`,
+        `🍰 Treated yourself on ${names}? Good. Money's for enjoying too. Coast the rest of the way.`,
       ];
       const reassuring = [
         "🕊️ “Spending money is easy. Spending it well is a skill.” An occasional treat you truly value is money well spent. — The Art of Spending Money",
@@ -492,10 +495,13 @@
       const c = close[0];
       const left = c.budgeted - catSpent(p, c.id);
       const pct = Math.round((catSpent(p, c.id) / c.budgeted) * 100);
-      return {
-        tone: "close",
-        text: `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
-      };
+      const closeLines = [
+        `👀 ${c.name} is getting close — ${fmt(left)} left (${pct}%). Ease off here and you'll finish strong.`,
+        `🫣 Eyes on ${c.name} — only ${fmt(left)} left (${pct}%). Coast it out and you've got this.`,
+        `🚦 ${c.name}'s at ${pct}% — ${fmt(left)} to go. Gentle from here and you'll land it perfectly.`,
+        `🧃 ${c.name} is nearly sipped dry — ${fmt(left)} left. A little pause and you're golden.`,
+      ];
+      return { tone: "close", text: rotateLine(closeLines) };
     }
     // On track — warm encouragements plus book wisdom. Quotes are shown most of
     // the time (see the weighted pick below); warm lines are the lighter garnish.
@@ -519,6 +525,27 @@
       "🪷 Unbothered budget, moisturized savings. Thriving.",
       "🔥 You're on a roll — same energy for the rest of the period.",
       "🍀 Right where you want to be. Keep the momentum going.",
+      // Playful, hype-friend energy — a lighter, funnier voice
+      "💅 Budget? Handled. Go enjoy your day, superstar.",
+      "✨ This budget is giving “has her life together.” Love that for you.",
+      "🧋 Under budget = guilt-free boba money. Just saying.",
+      "🎀 Neat, tidy, and totally in control. Iconic.",
+      "🦋 You're a budgeting butterfly right now — floating through, unbothered.",
+      "🐿️ Squirreling money away like a pro. Very chic of you.",
+      "🪩 Your savings are dancing. Keep the party going.",
+      "😎 Coasting, in control, kind of a big deal. No notes.",
+      "💖 Future-you is going to be SO proud of right-now-you.",
+      "🍩 Room to spare — go on, the little treat is within budget.",
+      "👑 Certified budget royalty this period. Bow down, bills.",
+      "🌈 You + this budget = a rom-com where everything works out.",
+      "🧸 Cozy little budget, all tucked in and right on track.",
+      "🎉 Look at you, being all responsible AND cute about it.",
+      "🍸 On track and thriving — treat yourself to something small, you earned the vibe.",
+      "🐢 Slow, steady, and winning. The tortoise had it right.",
+      "🌸 Soft life, sorted budget. This is the energy.",
+      "🕶️ Money moves so smooth they should be illegal. Keep going.",
+      "🫶 Little wins today, big freedom later. You're stacking them.",
+      "🧁 Sweet spot: on budget with room for a treat. Enjoy it.",
     ];
     const quoteLines = [
       // General money wisdom
@@ -612,8 +639,9 @@
         return { tone: "ok", text: `📊 At your current pace, you're on track to save about ${fmt(projSaved)} this period — keep it up!` };
       }
     }
-    // Show a book/wisdom quote most of the time; a warm one-liner now and then.
-    return { tone: "ok", text: Math.random() < 0.8 ? rotateLine(quoteLines) : rotateLine(warmLines) };
+    // Show a book/wisdom quote most of the time (Kelly loves them); sprinkle in a
+    // playful warm one-liner a bit more often now for personality.
+    return { tone: "ok", text: Math.random() < 0.72 ? rotateLine(quoteLines) : rotateLine(warmLines) };
   }
 
   const freqLabel = (f) =>
