@@ -987,3 +987,9 @@ textarea:focus-visible,
 .treat-head { font-size: 40px; text-align: center; margin-bottom: 4px; }
 .treat-balance { text-align: center; font-family: "Manrope", "Inter", sans-serif; font-size: 40px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .treat-balance span { display: block; font-family: "Inter", sans-serif; font-size: 12px; font-weight: 600; color: var(--text-dim); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
+/* Safe-to-spend-today line on the hero + quick amount presets */
+.hero-safe { display: block; margin-top: 12px; font-size: 13px; font-weight: 600; color: #fff; opacity: 0.95; }
+.hero-safe b { font-weight: 800; }
+.sp-presets { margin-top: 8px; }
+.sp-presets .chip { font-weight: 700; }
+.sp-recent-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

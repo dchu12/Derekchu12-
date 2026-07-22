@@ -1468,6 +1468,13 @@
     const saved = periodIncome(p) - spent; // money kept so far (income minus spent) — matches History/Results
     const dl = daysLeft(p);
     const coach = coachMessage(p);
+    // "Safe to spend today": discretionary money still left, spread over the days
+    // remaining. A calm, no-math number so she knows what's okay to spend now.
+    const discLeft = p.categories
+      .filter((c) => !c.fixed && !isSavingsCat(c))
+      .reduce((s, c) => s + Math.max(0, Number(c.budgeted) - catSpent(p, c.id)), 0);
+    const safeToday = discLeft / Math.max(1, dl);
+    const showSafe = dl > 0 && discLeft > 0.005;
     // Budget-used ring for the hero card.
     const pctSpent = budgeted > 0 ? Math.round((spent / budgeted) * 100) : 0;
     const ringC = 2 * Math.PI * 43;
@@ -1573,6 +1580,7 @@
               ? (dl === 0 ? "Vacation ended" : `${dl} ${dl === 1 ? "day" : "days"} left of vacation`)
               : (dl === 0 ? "Next paycheck due" : `${dl} ${dl === 1 ? "day" : "days"} until next paycheck`)
           }</button>
+          ${showSafe ? `<div class="hero-safe">💸 <b>${fmt(safeToday)}</b> safe to spend today</div>` : ""}
         </div>
         <div class="hero-ring" role="img" aria-label="${pctSpent}% of budget spent">
           <svg width="100" height="100" viewBox="0 0 100 100">
@@ -2449,6 +2457,21 @@
     let selectedCat =
       (editTxn && editTxn.categoryId) || presetCatId || (discCats[0] ? discCats[0].id : cats[0].id);
     if (!cats.some((c) => c.id === selectedCat)) selectedCat = cats[0].id;
+
+    // "Log again" — the last few distinct discretionary purchases, one tap to refill.
+    const recentTxns = [];
+    if (!editing) {
+      const seen = new Set();
+      for (let i = p.transactions.length - 1; i >= 0 && recentTxns.length < 4; i--) {
+        const t = p.transactions[i];
+        const c = cats.find((x) => x.id === t.categoryId);
+        if (!c || c.fixed) continue;
+        const key = t.categoryId + "|" + Number(t.amount) + "|" + (t.description || "").toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        recentTxns.push({ t, c });
+      }
+    }
     const selIsFixed = fixedCats.some((c) => c.id === selectedCat);
     const spChip = (c, isFixed) =>
       `<button type="button" class="chip${isFixed ? " sp-fixchip" : ""} ${c.id === selectedCat ? "active" : ""}" data-cat="${c.id}" aria-pressed="${c.id === selectedCat}"${isFixed && !selIsFixed ? " hidden" : ""}>${esc(c.emoji)} ${esc(c.name)}</button>`;
@@ -2463,10 +2486,20 @@
             <input id="sp-quick" placeholder="Type it — e.g. “38 ramen” or “12 coffee”" autocomplete="off" enterkeyhint="done" />
             <div class="quick-hint" id="sp-quick-hint" aria-live="polite"></div>
           </div>`}
+          ${recentTxns.length ? `
+          <div class="field">
+            <label>🔁 Log again</label>
+            <div class="chips" id="sp-recent">
+              ${recentTxns.map((r, i) => `<button type="button" class="chip sp-recent-chip" data-ri="${i}">${esc(r.c.emoji)} ${esc(fmt(Number(r.t.amount)))}${r.t.description ? ` · ${esc(r.t.description)}` : ""}</button>`).join("")}
+            </div>
+          </div>` : ""}
           <div class="field money-input">
             <label for="sp-amount">Amount</label>
             <input id="sp-amount" type="number" inputmode="decimal" placeholder="0.00" step="0.01"
               value="${editing ? esc(editTxn.amount) : ""}" />
+            ${editing ? "" : `<div class="chips sp-presets" id="sp-presets" role="group" aria-label="Quick amounts">
+              ${[5, 10, 20, 50].map((a) => `<button type="button" class="chip" data-amt="${a}">+${esc(fmt(a))}</button>`).join("")}
+            </div>`}
           </div>
           <div class="field">
             <label>Category</label>
@@ -2496,16 +2529,46 @@
     const amountEl = document.getElementById("sp-amount");
     amountEl.addEventListener("input", () => clearFieldError(amountEl));
 
-    document.getElementById("sp-chips").addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-cat]");
-      if (!btn) return;
-      selectedCat = btn.dataset.cat;
+    const setSelectedCat = (id) => {
+      selectedCat = id;
       document.querySelectorAll("#sp-chips .chip").forEach((c) => {
         const on = c.dataset.cat === selectedCat;
         c.classList.toggle("active", on);
         c.setAttribute("aria-pressed", on);
       });
+    };
+
+    document.getElementById("sp-chips").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-cat]");
+      if (!btn) return;
+      setSelectedCat(btn.dataset.cat);
     });
+
+    // Preset "+$5/+$10…" chips add to the amount so you can build it up fast.
+    const presets = document.getElementById("sp-presets");
+    if (presets)
+      presets.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-amt]");
+        if (!btn) return;
+        const cur = Number(amountEl.value) || 0;
+        amountEl.value = String(Math.round((cur + Number(btn.dataset.amt)) * 100) / 100);
+        clearFieldError(amountEl);
+      });
+
+    // "Log again" chips refill amount + category + note from a recent purchase.
+    const recentEl = document.getElementById("sp-recent");
+    if (recentEl)
+      recentEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-ri]");
+        if (!btn) return;
+        const r = recentTxns[Number(btn.dataset.ri)];
+        if (!r) return;
+        amountEl.value = String(Number(r.t.amount));
+        clearFieldError(amountEl);
+        if (r.c && cats.some((c) => c.id === r.c.id)) setSelectedCat(r.c.id);
+        const descEl = document.getElementById("sp-desc");
+        if (descEl) descEl.value = r.t.description || "";
+      });
     const moreFixed = document.getElementById("sp-morefixed");
     if (moreFixed)
       moreFixed.addEventListener("click", () => {
@@ -2982,11 +3045,20 @@
         showFieldError(amtEl, "Enter an amount greater than zero.");
         return;
       }
+      const wasDone = g.target > 0 && (Number(g.saved) || 0) >= g.target - 0.005;
       g.saved = Math.max(0, (Number(g.saved) || 0) + v);
+      const nowDone = g.target > 0 && g.saved >= g.target - 0.005;
+      const justHit = nowDone && !wasDone && !g.celebrated;
+      if (justHit) g.celebrated = true;
       save();
       close();
       render();
-      showToast(`Added ${fmt(v)} to ${g.name} 🎯`);
+      if (justHit) {
+        celebrateBig();
+        showToast(`🎉 Goal reached — ${g.name} is fully funded! You did it.`);
+      } else {
+        showToast(`Added ${fmt(v)} to ${g.name} 🎯`);
+      }
     });
     document.getElementById("gc-close").addEventListener("click", close);
     document.getElementById("gc-edit").addEventListener("click", () => {
@@ -3056,6 +3128,9 @@
         g.target = target;
         const sv = document.getElementById("g-saved");
         if (sv) g.saved = Math.max(0, Number(sv.value) || 0);
+        // If the goal isn't complete anymore (raised target / lowered saved),
+        // re-arm the celebration so reaching it again still celebrates.
+        if (!(g.target > 0 && g.saved >= g.target - 0.005)) g.celebrated = false;
       } else {
         if (!Array.isArray(state.goals)) state.goals = [];
         state.goals.push({ id: uid(), emoji, name, target, saved: 0 });
