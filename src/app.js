@@ -2456,6 +2456,7 @@
       );
       close();
       render();
+      celebrateLog();
       if (newlyOver.length) {
         openOverBudgetAlert(p, newlyOver);
       } else if (newlyClose.length) {
@@ -2540,6 +2541,7 @@
       close();
       render(); // no active period -> setup flow appears
       openRecapCard(p); // celebrate the period that just wrapped
+      celebrateBig(); // fireworks + confetti over the recap
     });
   }
 
@@ -4880,6 +4882,122 @@
       if (document.visibilityState === "hidden") bgAt = Date.now();
       else if (document.visibilityState === "visible" && lockEnabled() && !_locked && bgAt && Date.now() - bgAt > AUTOLOCK_MS) lockNow();
     });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Celebrations — a tiny canvas particle system for confetti + fireworks,
+   * plus haptic feedback. No libraries (offline/CSP-safe): a single full-
+   * screen, pointer-through canvas is spun up on demand and torn down once
+   * the last particle falls. Respects prefers-reduced-motion.
+   * ------------------------------------------------------------------ */
+  const _cfx = { canvas: null, ctx: null, parts: [], raf: 0, last: 0, w: 0, h: 0 };
+  function prefersReducedMotion() {
+    try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; }
+  }
+  function haptic(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {} }
+  function celebrateColors() {
+    let acc = "";
+    try { acc = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(); } catch (e) {}
+    return [acc || "#1c39bb", "#ffd23f", "#ff6b6b", "#31c48d", "#4dabf7", "#e64980", "#ffa94d"];
+  }
+  function cfxEnsure() {
+    if (_cfx.canvas) return;
+    const c = document.createElement("canvas");
+    c.id = "celebrate-canvas";
+    c.setAttribute("aria-hidden", "true");
+    c.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:3000;";
+    document.body.appendChild(c);
+    const ctx = c.getContext && c.getContext("2d");
+    if (!ctx) { c.remove(); return; } // no canvas support (e.g. jsdom) — skip silently
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    _cfx.w = window.innerWidth; _cfx.h = window.innerHeight;
+    c.width = _cfx.w * dpr; c.height = _cfx.h * dpr;
+    ctx.scale(dpr, dpr);
+    _cfx.canvas = c; _cfx.ctx = ctx;
+  }
+  function cfxTeardown() {
+    if (_cfx.canvas) _cfx.canvas.remove();
+    _cfx.canvas = null; _cfx.ctx = null; _cfx.parts = []; _cfx.raf = 0; _cfx.last = 0;
+  }
+  function cfxLoop(ts) {
+    const ctx = _cfx.ctx; if (!ctx) return;
+    const dt = _cfx.last ? Math.min((ts - _cfx.last) / 16.67, 3) : 1; _cfx.last = ts;
+    ctx.clearRect(0, 0, _cfx.w, _cfx.h);
+    for (const p of _cfx.parts) {
+      p.vy += 0.14 * dt * p.grav; p.vx *= 0.995; p.x += p.vx * dt; p.y += p.vy * dt;
+      p.rot += p.vr * dt; p.life -= dt;
+      const a = Math.max(0, Math.min(1, p.life / p.fade));
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color;
+      if (p.shape === "circle") { ctx.beginPath(); ctx.arc(0, 0, p.size, 0, 7); ctx.fill(); }
+      else ctx.fillRect(-p.size, -p.size * 0.6, p.size * 2, p.size * 1.2);
+      ctx.restore();
+    }
+    _cfx.parts = _cfx.parts.filter((p) => p.life > 0 && p.y < _cfx.h + 40);
+    if (_cfx.parts.length) _cfx.raf = requestAnimationFrame(cfxLoop);
+    else cfxTeardown();
+  }
+  function cfxStart() { if (!_cfx.raf) { _cfx.last = 0; _cfx.raf = requestAnimationFrame(cfxLoop); } }
+
+  function fireConfetti(opts) {
+    if (prefersReducedMotion()) return;
+    opts = opts || {};
+    cfxEnsure();
+    if (!_cfx.ctx) return;
+    const w = _cfx.w, h = _cfx.h;
+    const x = opts.x != null ? opts.x : w / 2;
+    const y = opts.y != null ? opts.y : h * 0.72;
+    const count = opts.count || 100;
+    const spread = opts.spread != null ? opts.spread : Math.PI * 0.9;
+    const power = opts.power || 9;
+    const colors = celebrateColors();
+    for (let i = 0; i < count; i++) {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * spread; // upward cone
+      const sp = power * (0.5 + Math.random());
+      _cfx.parts.push({
+        x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 2, grav: 1,
+        vr: (Math.random() - 0.5) * 0.4, rot: Math.random() * 7,
+        size: 3 + Math.random() * 4, color: colors[i % colors.length],
+        shape: Math.random() < 0.5 ? "rect" : "circle",
+        life: 90 + Math.random() * 45, fade: 70,
+      });
+    }
+    cfxStart();
+  }
+  function fireFireworks(shots) {
+    if (prefersReducedMotion()) return;
+    cfxEnsure();
+    if (!_cfx.ctx) return;
+    shots = shots || 5;
+    let i = 0;
+    const burst = (x, y) => {
+      const colors = celebrateColors();
+      const col = colors[Math.floor(Math.random() * colors.length)];
+      const n = 44;
+      for (let k = 0; k < n; k++) {
+        const ang = (k / n) * Math.PI * 2 + Math.random() * 0.1;
+        const sp = 4 + Math.random() * 3.5;
+        _cfx.parts.push({
+          x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, grav: 0.5,
+          vr: 0, rot: 0, size: 2 + Math.random() * 2,
+          color: Math.random() < 0.28 ? "#ffffff" : col, shape: "circle",
+          life: 55 + Math.random() * 35, fade: 55,
+        });
+      }
+      cfxStart();
+    };
+    const launch = () => {
+      burst(_cfx.w * (0.18 + Math.random() * 0.64), _cfx.h * (0.18 + Math.random() * 0.34));
+      if (++i < shots) setTimeout(launch, 240 + Math.random() * 220);
+    };
+    launch();
+  }
+  // A purchase logged — a quick confetti pop + a short buzz.
+  function celebrateLog() { fireConfetti({ count: 90 }); haptic(20); }
+  // A pay period wrapped — fireworks, a bigger confetti burst, a celebratory buzz.
+  function celebrateBig() {
+    fireConfetti({ count: 150, power: 11 });
+    fireFireworks(6);
+    haptic([0, 40, 55, 40, 55, 90]);
   }
 
   /* Boot */
