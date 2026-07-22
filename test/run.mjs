@@ -170,6 +170,36 @@ eq(T.fmt(1234.5), "$1,234.50", "fmt: thousands grouped");
   eq(Math.round(r[0].rate * 100), 38, "save rate positive (1000/2600) — savings no longer sinks it");
 }
 
+/* ---- Treat Fund (under-budget rewards) -------------------------------- */
+{
+  const p = {
+    startDate: "2026-07-01", paycheckAmount: 2600, extraIncome: [],
+    categories: [
+      { id: "rent", name: "Rent", budgeted: 1200, fixed: true }, // fixed — excluded
+      { id: "food", name: "Groceries", budgeted: 500 },          // spent 400 → 100 under
+      { id: "fun", name: "Fun", budgeted: 300 },                 // spent 300 → 0 under
+      { id: "sav", name: "Savings", budgeted: 200 },             // savings — excluded
+      { id: "treat", name: "Treat Yourself", budgeted: 50, treat: true }, // treat — excluded
+    ],
+    transactions: [
+      { categoryId: "rent", amount: 1200 },
+      { categoryId: "food", amount: 400 },
+      { categoryId: "fun", amount: 300 },
+      { categoryId: "sav", amount: 200 },
+      { categoryId: "treat", amount: 0 },
+    ],
+  };
+  eq(T.underBudgetAmount(p), 100, "under-budget = discretionary leftover only (food 100), excludes fixed/savings/treat");
+  // rate defaults to 0.5 unless state overrides it
+  T.setState(Object.assign(T.defaultState(), { treat: { balance: 0, earnedTotal: 0, spentTotal: 0, rate: 0.5, enabled: true } }));
+  eq(T.treatEarnedFor(p), 50, "treat earned = 50% of $100 under budget = $50");
+  T.setState(Object.assign(T.defaultState(), { treat: { balance: 0, earnedTotal: 0, spentTotal: 0, rate: 0.25, enabled: true } }));
+  eq(T.treatEarnedFor(p), 25, "treat earned honors 25% rate");
+  // overspending overall → no reward
+  const over = { ...p, transactions: [{ categoryId: "food", amount: 700 }, { categoryId: "fun", amount: 300 }] };
+  eq(T.treatEarnedFor(over), 0, "no treat when overspent (base negative)");
+}
+
 /* ---- household invite code format ------------------------------------ */
 {
   const codes = Array.from({ length: 50 }, () => T.genInviteCode());
