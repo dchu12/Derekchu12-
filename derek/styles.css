@@ -980,17 +980,6 @@ textarea:focus-visible,
 .hh-you { font-size: 10px; font-weight: 800; text-transform: uppercase; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 1px 7px; margin-left: 4px; }
 .hh-nums { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
 .hh-code-box { font-size: 26px; font-weight: 800; letter-spacing: 6px; text-align: center; background: var(--surface-2); border-radius: 12px; padding: 12px; margin: 8px 0; color: var(--text); }
-/* Treat Fund */
-.treat-card { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; border: none; cursor: pointer; }
-.treat-emoji { font-size: 30px; flex: 0 0 auto; line-height: 1; }
-.treat-body { flex: 1; min-width: 0; }
-.treat-title { display: flex; align-items: baseline; gap: 8px; font-weight: 800; font-size: 15px; }
-.treat-amt { font-family: "Manrope", "Inter", sans-serif; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
-.treat-sub { display: block; color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
-.treat-chevron { flex: 0 0 auto; color: var(--text-dim); font-size: 22px; }
-.treat-head { font-size: 40px; text-align: center; margin-bottom: 4px; }
-.treat-balance { text-align: center; font-family: "Manrope", "Inter", sans-serif; font-size: 40px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.treat-balance span { display: block; font-family: "Inter", sans-serif; font-size: 12px; font-weight: 600; color: var(--text-dim); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
 /* Safe-to-spend-today line on the hero + quick amount presets */
 .hero-safe { display: block; margin-top: 12px; font-size: 13px; font-weight: 600; color: #fff; opacity: 0.95; }
 .hero-safe b { font-weight: 800; }
